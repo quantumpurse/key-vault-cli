@@ -352,6 +352,34 @@ impl App {
         self.lc_qr_dep_warmup_done = false;
         self.lc_scripts_registered = false;
 
+        // The adoption series is per-network: drop any in-flight
+        // fetch, show the new network's cached series immediately, and
+        // rebuild against the chain on the next tick.
+        self.qr_adoption_rx = None;
+        self.qr_adoption_next_fetch = None;
+        self.qr_adoption_series = crate::qr_adoption::load_series(self.qp_client.network().tag());
+
+        // Balances, tx history, and DAO cells are network-scoped but
+        // keyed by lock args alone — left in place they keep rendering
+        // the previous network's numbers (and the balance chart would
+        // replay the previous network's tape against the new total)
+        // until a successful fetch overwrites them, which a slow-to-
+        // boot local node can delay indefinitely. Drop them together
+        // with their in-flight receivers; the per-network tx history
+        // reloads from disk and the poller refetches the rest.
+        self.balances.clear();
+        self.spendable_balances.clear();
+        self.balance_receiver = None;
+        self.dao_deposited_cells.clear();
+        self.dao_prepared_cells.clear();
+        self.dao_deposited_staging.clear();
+        self.dao_prepared_staging.clear();
+        self.dao_cells_query_rx = None;
+        self.tx_history.clear();
+        self.tx_history_rx = None;
+        self.balance_chart_cache = None;
+        self.load_tx_history_from_disk();
+
         self.status = Status::Info("Configuration saved. RPC reconnected.".to_string());
         tracing::info!(
             "Node config applied (node_type={:?}, network={:?})",

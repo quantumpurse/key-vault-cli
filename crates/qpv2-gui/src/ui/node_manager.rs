@@ -5,8 +5,8 @@ use eframe::egui;
 
 use crate::types::{display_font, label_font, Status};
 use crate::ui::utils::{
-    breathing_dot, data_row, data_row_colored, ghost_button, group_thousands, lerp_color,
-    panel_frame, row_hover, section_header, value_flash,
+    breathing_dot, ckb_split, data_row, data_row_colored, draw_series_chart, ghost_button,
+    group_thousands, lerp_color, panel_frame, row_hover, section_header, value_flash,
 };
 use crate::App;
 
@@ -97,6 +97,13 @@ impl App {
                     });
                 }
 
+                // ── 06 / QR Lock Adoption ───────────────────
+                ui.add_space(12.0);
+                panel_frame(&self.colors).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    self.draw_qr_adoption_section(ui);
+                });
+
                 // Applied after rendering so the frame draws against the
                 // pre-switch state instead of half-updated config.
                 if let Some(backend) = switch_to {
@@ -106,6 +113,75 @@ impl App {
                 ui.add_space(20.0);
             });
         });
+    }
+
+    /// Network-wide adoption of the quantum-resistant lock script:
+    /// headline CKB total plus the weekly chart. Chain telemetry, so it
+    /// lives here with the rest of the node instrumentation — data via
+    /// a public RPC indexer (the light client only sees its registered
+    /// scripts), reconstructed from live cells' creation blocks.
+    fn draw_qr_adoption_section(&mut self, ui: &mut egui::Ui) {
+        section_header(ui, &self.colors, "06", "QR Lock Adoption");
+        ui.add_space(8.0);
+
+        match self.qr_adoption_series.last().copied() {
+            Some((ts, total)) => {
+                let (int, frac) = ckb_split(total);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.label(
+                        egui::RichText::new(int)
+                            .font(display_font(20.0))
+                            .color(self.colors.text),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!(".{}", &frac[..2]))
+                            .font(display_font(13.0))
+                            .color(self.colors.text_muted),
+                    );
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("CKB")
+                            .font(label_font(9.0))
+                            .color(self.colors.accent),
+                    );
+                });
+                ui.label(
+                    egui::RichText::new("SECURED BY THE QUANTUM-RESISTANT LOCK · NETWORK-WIDE")
+                        .font(label_font(8.0))
+                        .color(self.colors.text_muted),
+                );
+                ui.add_space(8.0);
+
+                draw_series_chart(
+                    ui,
+                    &self.colors,
+                    &self.qr_adoption_series,
+                    110.0,
+                    Some(&self.qr_adoption_series),
+                    "QUERYING PUBLIC INDEXER",
+                    "Network-wide CKB under the quantum-resistant lock, weekly, \
+                     reconstructed from live cells via public RPC.",
+                );
+
+                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "VIA PUBLIC RPC · WEEKLY · UPDATED {}",
+                        crate::utils::format_relative_time(ts).to_uppercase()
+                    ))
+                    .font(label_font(7.5))
+                    .color(self.colors.text_muted),
+                );
+            }
+            None => {
+                ui.label(
+                    egui::RichText::new("Querying public indexer...")
+                        .size(11.0)
+                        .color(self.colors.text_muted),
+                );
+            }
+        }
     }
 
     fn backend_label(backend: NodeType) -> &'static str {

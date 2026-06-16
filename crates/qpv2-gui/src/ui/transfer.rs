@@ -8,7 +8,7 @@ use crate::types::{
     display_font, label_font, AppColors, TransactionKind, TransactionStatus, TxKind,
 };
 use crate::ui::utils::{
-    accent_button, badge, breathing_dot, ghost_button, panel_frame, row_hover, section_header,
+    accent_button, badge, ghost_button, panel_frame, row_hover, section_header,
 };
 use crate::utils::{format_ckb, format_ckb_balance};
 use crate::App;
@@ -39,33 +39,6 @@ fn field_rule(ui: &mut egui::Ui, colors: &AppColors) {
         egui::Stroke::new(1.0, colors.border),
     );
     ui.add_space(8.0);
-}
-
-/// One terminal log line: `[TAG ] message`, with an optional breathing
-/// dot for in-flight states.
-fn log_line(
-    ui: &mut egui::Ui,
-    tag: &str,
-    tag_color: egui::Color32,
-    msg: &str,
-    msg_color: egui::Color32,
-    live: bool,
-) {
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(tag)
-                .font(label_font(10.0))
-                .color(tag_color),
-        );
-        if live {
-            let t = ui.input(|i| i.time) as f32;
-            let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-            breathing_dot(ui.painter(), r.center(), tag_color, t, false);
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(50));
-        }
-        ui.label(egui::RichText::new(msg).size(11.5).color(msg_color));
-    });
 }
 
 impl App {
@@ -359,97 +332,6 @@ impl App {
                 self.transfer_async();
             }
         });
-    }
-
-    /// TransactionStatus progression rendered as terminal log lines.
-    /// `dao_screen` scopes the log to the calling screen's own flow —
-    /// the status slot is shared, and a DAO transaction's progress must
-    /// not read as a transfer's (or vice versa).
-    pub(crate) fn draw_tx_status_log(&mut self, ui: &mut egui::Ui, dao_screen: bool) {
-        let owns = self
-            .active_tx_kind
-            .is_some_and(|k| k.is_dao() == dao_screen);
-        if matches!(self.tx_status, TransactionStatus::Idle) || !owns {
-            return;
-        }
-        let c = &self.colors;
-        ui.add_space(10.0);
-
-        match &self.tx_status {
-            TransactionStatus::Idle => {}
-            TransactionStatus::Building => log_line(
-                ui,
-                "[BUILD]",
-                c.text_muted,
-                "Building transaction...",
-                c.text_muted,
-                false,
-            ),
-            TransactionStatus::AwaitingSignature => log_line(
-                ui,
-                "[SIGN ]",
-                c.accent,
-                "Awaiting signature authorization...",
-                c.text,
-                true,
-            ),
-            TransactionStatus::AwaitingCoSigners {
-                request,
-                signatures,
-                ..
-            } => log_line(
-                ui,
-                "[SIGN ]",
-                c.accent,
-                &format!(
-                    "Awaiting co-signers — {} of {} signatures collected.",
-                    signatures.len(),
-                    request.multisig_config.threshold
-                ),
-                c.text,
-                true,
-            ),
-            TransactionStatus::Sending => log_line(
-                ui,
-                "[SEND ]",
-                c.accent,
-                "Broadcasting transaction...",
-                c.text,
-                true,
-            ),
-            TransactionStatus::Success(tx_hash) => {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("[ OK  ]")
-                            .font(label_font(10.0))
-                            .color(c.accent2),
-                    );
-                    ui.label(
-                        egui::RichText::new("Transaction sent")
-                            .size(11.5)
-                            .color(c.accent2),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "0x{}…{}",
-                            &tx_hash[..8],
-                            &tx_hash[tx_hash.len() - 8..]
-                        ))
-                        .size(11.5)
-                        .color(c.text_muted),
-                    );
-                    if ui
-                        .add(ghost_button(c, "COPY", egui::vec2(50.0, 20.0)))
-                        .clicked()
-                    {
-                        ui.ctx().copy_text(format!("0x{}", tx_hash));
-                    }
-                });
-            }
-            TransactionStatus::Error(msg) => {
-                log_line(ui, "[ ERR ]", c.danger, msg, c.danger, false)
-            }
-        }
     }
 
     /// Recent external recipients harvested from outgoing history.

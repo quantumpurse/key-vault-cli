@@ -12,10 +12,12 @@
 
 pub mod balance;
 pub mod dao_cells;
+pub mod qr_adoption;
 pub mod spendable;
 pub mod tx_history;
 
 pub use balance::fetch_quantum_lock_balance;
 pub use dao_cells::{categorize_dao_cells, DepositedCell, PreparedCell};
+pub use qr_adoption::fetch_qr_adoption_series;
 pub use spendable::spendable_capacity;
 pub use tx_history::fetch_recent_transactions;

@@ -2,6 +2,7 @@
 
 use crate::types::{
     BalanceResult, DaoQueryEvent, Status, TransactionKind, TransactionStatus, TxHistoryEvent,
+    TxKind,
 };
 use crate::App;
 use std::sync::mpsc;
@@ -263,9 +264,35 @@ impl App {
                     // syncs append to the existing vector — without this
                     // pass, [old-newest, ..., old-oldest, new-newest,
                     // ..., new-oldest] would render in the wrong order.
-                    self.tx_history
-                        .sort_by_key(|item| std::cmp::Reverse(item.block_number));
-                    self.tx_history.dedup_by(|a, b| a.tx_hash == b.tx_hash);
+                    // Secondary key tx_hash so same-hash records from
+                    // different accounts are adjacent even when several
+                    // txs share a block.
+                    self.tx_history.sort_by(|a, b| {
+                        b.block_number
+                            .cmp(&a.block_number)
+                            .then_with(|| a.tx_hash.cmp(&b.tx_hash))
+                    });
+                    // Merge same-hash records instead of dropping them:
+                    // a tx paying several wallet accounts yields one
+                    // record per account, each carrying only that
+                    // account's portion — plain dedup under-reported
+                    // the amount. External incoming portions sum; for
+                    // other kinds (internal pairs, outgoing — whose
+                    // amount already covers the whole tx) the first
+                    // record stands.
+                    self.tx_history.dedup_by(|dup, keep| {
+                        if dup.tx_hash != keep.tx_hash {
+                            return false;
+                        }
+                        if keep.tx_kind == TxKind::Incoming
+                            && dup.tx_kind == TxKind::Incoming
+                            && keep.internal_counterparty_lock_args.is_none()
+                            && dup.internal_counterparty_lock_args.is_none()
+                        {
+                            keep.amount = keep.amount.saturating_add(dup.amount);
+                        }
+                        true
+                    });
 
                     // Persist the new snapshot so a restart can render
                     // instantly and the next sync only pulls blocks above
@@ -441,6 +468,36 @@ impl App {
             Err(mpsc::TryRecvError::Empty) => {}
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.earliest_funding_block_rx = None;
+            }
+        }
+    }
+
+    /// Pick up a freshly built QR-lock adoption series. Failures are
+    /// logged and rescheduled on the short retry cadence so a transient
+    /// public-RPC error doesn't strand the UI in "Querying..." for the
+    /// full refresh interval.
+    pub(crate) fn poll_qr_adoption(&mut self) {
+        let rx = match &self.qr_adoption_rx {
+            Some(rx) => rx,
+            None => return,
+        };
+        match rx.try_recv() {
+            Ok(Ok(series)) => {
+                self.qr_adoption_rx = None;
+                crate::qr_adoption::save_series(self.qp_client.network().tag(), &series);
+                self.qr_adoption_series = series;
+            }
+            Ok(Err(e)) => {
+                self.qr_adoption_rx = None;
+                tracing::error!("qr adoption: fetch: {}", e);
+                self.qr_adoption_next_fetch =
+                    Some(std::time::Instant::now() + crate::QR_ADOPTION_RETRY);
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.qr_adoption_rx = None;
+                self.qr_adoption_next_fetch =
+                    Some(std::time::Instant::now() + crate::QR_ADOPTION_RETRY);
             }
         }
     }

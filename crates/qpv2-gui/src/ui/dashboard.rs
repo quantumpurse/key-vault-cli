@@ -4,8 +4,8 @@
 use eframe::egui;
 
 use super::utils::{
-    breathing_dot, ckb_split, ghost_button, lerp_color, panel_frame, row_hover, section_header,
-    value_flash,
+    breathing_dot, ckb_split, draw_series_chart, ghost_button, lerp_color, panel_frame, row_hover,
+    section_header, value_flash,
 };
 use crate::types::{display_font, label_font, AppColors, Status, Tab, TxKind, TxRecord};
 use crate::utils::format_relative_time;
@@ -64,12 +64,23 @@ impl App {
             .values()
             .filter_map(|b| b.as_ref().copied())
             .sum();
-        let dao_interest: u64 = self
+        // DAO interest: prepared cells carry an exact, locked-in payout;
+        // deposited cells are still earning, estimated from AR growth to
+        // tip (the same per-position figure the DAO tab shows). Both are
+        // folded into the total so the headline, the chart, and the
+        // AVAILABLE + DAO LOCKED + DAO EARNED columns stay consistent.
+        let prepared_interest: u64 = self
             .dao_prepared_cells
             .iter()
             .map(|(_, c)| c.maximum_withdraw.saturating_sub(c.capacity))
             .sum();
-        let total_shannons = base_balance + dao_interest;
+        let deposited_estimate: u64 = self
+            .dao_deposited_cells
+            .iter()
+            .filter_map(|(_, c)| self.estimated_deposit_interest(c))
+            .sum();
+        let dao_earned = prepared_interest + deposited_estimate;
+        let total_shannons = base_balance + dao_earned;
 
         // DAO Locked — sum of deposited + prepared cell capacities
         // across all accounts.
@@ -91,28 +102,86 @@ impl App {
             section_header(ui, &self.colors, "01", "Total Balance");
             ui.add_space(12.0);
 
-            // Display numerals, integer part flashing accent on change.
+            // Display numerals on the left; the balance-history chart
+            // claims all remaining width up to the panel's right edge.
+            // The numerals column is measured from the actual strings
+            // at the actual fonts so the hero readout can never wrap,
+            // whatever the balance magnitude or window width.
             let flash = value_flash(ui, egui::Id::new("dash-total-flash"), total_shannons);
             let int_color = lerp_color(self.colors.text, self.colors.accent, flash);
             let (int, frac) = ckb_split(total_shannons);
-            ui.horizontal(|ui| {
+            let int_w = ui
+                .painter()
+                .layout_no_wrap(int.clone(), display_font(34.0), int_color)
+                .size()
+                .x;
+            let frac_w = ui
+                .painter()
+                .layout_no_wrap(format!(".{}", frac), display_font(20.0), int_color)
+                .size()
+                .x;
+            let left_w = int_w + frac_w + 10.0 + 30.0; // gap + "CKB" tag
+            let chart_w = (ui.available_width() - left_w - 14.0).max(140.0);
+            ui.horizontal_top(|ui| {
+                // The 14px gap below is the only spacing between the two
+                // columns; without this, egui's default item_spacing.x
+                // adds another 8px that chart_w doesn't account for, so
+                // the chart overflows the panel's right edge and the
+                // card's border eats into the screen's right margin.
                 ui.spacing_mut().item_spacing.x = 0.0;
-                ui.label(
-                    egui::RichText::new(int)
-                        .font(display_font(34.0))
-                        .color(int_color),
-                );
-                ui.label(
-                    egui::RichText::new(format!(".{}", frac))
-                        .font(display_font(20.0))
-                        .color(self.colors.text_muted),
-                );
-                ui.add_space(10.0);
-                ui.label(
-                    egui::RichText::new("CKB")
-                        .font(label_font(10.0))
-                        .color(self.colors.accent),
-                );
+                ui.vertical(|ui| {
+                    ui.set_width(left_w);
+                    ui.add_space(14.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.label(
+                            egui::RichText::new(int)
+                                .font(display_font(34.0))
+                                .color(int_color),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!(".{}", frac))
+                                .font(display_font(20.0))
+                                .color(self.colors.text_muted),
+                        );
+                        ui.add_space(10.0);
+                        ui.label(
+                            egui::RichText::new("CKB")
+                                .font(label_font(10.0))
+                                .color(self.colors.accent),
+                        );
+                    });
+                });
+                ui.add_space(14.0);
+                ui.vertical(|ui| {
+                    ui.set_width(chart_w);
+                    // Memoized: replaying + sorting the whole tape every
+                    // frame is wasted work. Key on the inputs, with time
+                    // bucketed to 10s so the cache stays hot between
+                    // repaints.
+                    let now = crate::utils::unix_now_secs();
+                    let key = (self.tx_history.len(), total_shannons, now / 10);
+                    if self.balance_chart_cache.as_ref().map(|(k, _, _)| *k) != Some(key) {
+                        let (h, d) = self.balance_history(total_shannons, now);
+                        self.balance_chart_cache = Some((key, h, d));
+                    }
+                    let (_, history, tx_dots) =
+                        self.balance_chart_cache.as_ref().expect("set above");
+                    // Dots stay while they're legible: at least ~18px
+                    // apart on average at the current chart width. Past
+                    // that density the line alone tells the story.
+                    let max_dots = (chart_w / 18.0).max(4.0) as usize;
+                    let dots = (tx_dots.len() <= max_dots).then_some(tx_dots.as_slice());
+                    draw_series_chart(
+                        ui,
+                        &self.colors,
+                        history,
+                        92.0,
+                        dots,
+                        "NO SYNCED HISTORY YET",
+                        "Your total balance over synced history.",
+                    );
+                });
             });
 
             ui.add_space(12.0);
@@ -128,6 +197,13 @@ impl App {
             // Semantic colors: spendable in the accent, locked capital
             // in caution yellow, yield in green; the plain count stays
             // neutral.
+            // "~" once deposited cells contribute (their payout is at a
+            // future epoch), matching the DAO tab's per-position figures.
+            let earned_prefix = if self.dao_deposited_cells.is_empty() {
+                "+"
+            } else {
+                "~+"
+            };
             let metas = [
                 ("AVAILABLE", meta_ckb(available), self.colors.accent),
                 (
@@ -138,13 +214,22 @@ impl App {
                 ("DAO LOCKED", meta_ckb(dao_locked), self.colors.warn),
                 (
                     "DAO EARNED",
-                    format!("+{}", meta_ckb(dao_interest)),
+                    format!("{}{}", earned_prefix, meta_ckb(dao_earned)),
                     self.colors.accent2,
                 ),
                 ("APC", self.compute_dao_apc(), self.colors.accent2),
+                (
+                    "QR TVL",
+                    self.qr_adoption_series
+                        .last()
+                        .map(|&(_, v)| meta_ckb(v))
+                        .unwrap_or_else(|| "--".to_string()),
+                    self.colors.accent,
+                ),
             ];
             let gap = 25.0;
-            let col_w = (ui.available_width() - 4.0 * gap) / 5.0;
+            let n = metas.len() as f32;
+            let col_w = (ui.available_width() - (n - 1.0) * gap) / n;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 for (i, (label, value, color)) in metas.iter().enumerate() {
@@ -175,6 +260,74 @@ impl App {
                 }
             });
         });
+    }
+
+    /// Reconstructs the wallet's full balance history by replaying the
+    /// transaction tape backwards from the live total. Internal
+    /// transfers and DAO operations are (fees aside) net-zero to the
+    /// wallet total and produce no step.
+    ///
+    /// Returns `(line_points, tx_points)`: the line connects the
+    /// balance after each transaction with straight segments (matching
+    /// the TVL chart's look), from the first known transaction to the
+    /// live total. `tx_points` holds one
+    /// entry per balance-changing transaction for dot markers; event
+    /// timestamps are fixed, so dots never drift between repaints.
+    fn balance_history(&self, current_total: u64, now: u64) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
+        // Clamp event times below `now`: block headers may run ahead
+        // of the local clock (consensus allows ~15s), and the series is
+        // headed by the (now, total) anchor — a later event would make
+        // the x axis double back.
+        let mut events: Vec<(u64, i128)> = self
+            .tx_history
+            .iter()
+            .filter(|r| r.timestamp > 0 && r.internal_counterparty_lock_args.is_none())
+            .filter_map(|r| {
+                let ts = r.timestamp.min(now.saturating_sub(1));
+                match r.tx_kind {
+                    TxKind::Incoming => Some((ts, r.amount as i128)),
+                    TxKind::Outgoing => Some((ts, -(r.amount as i128))),
+                    _ => None,
+                }
+            })
+            .collect();
+        if events.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
+        events.sort_by_key(|&(ts, _)| ts);
+
+        // Coalesce same-timestamp events (txs sharing a block): one net
+        // delta per instant, or the interleaved step edges would send
+        // the x axis backwards and the area fill into bowtie quads.
+        let mut merged: Vec<(u64, i128)> = Vec::with_capacity(events.len());
+        for (ts, delta) in events {
+            match merged.last_mut() {
+                Some((last_ts, last_delta)) if *last_ts == ts => *last_delta += delta,
+                _ => merged.push((ts, delta)),
+            }
+        }
+
+        // Straight segments between transaction points (the TVL chart's
+        // look) rather than square step edges: each point is the
+        // balance right after its transaction, plus the live total as
+        // the head.
+        let mut points: Vec<(u64, u64)> = vec![(now, current_total)];
+        let mut tx_points: Vec<(u64, u64)> = Vec::new();
+        let mut bal = current_total as i128;
+        for &(ts, delta) in merged.iter().rev() {
+            let after = (ts, bal.max(0) as u64);
+            points.push(after);
+            tx_points.push(after);
+            bal -= delta;
+        }
+        // Deliberately no pre-history anchor point: it is ~0 for any
+        // wallet whose funding is inside the synced window, and a 0 in
+        // the series pins the y-axis to zero — flattening the real
+        // balance detail into the top few pixels. The line starts at
+        // the first known transaction instead.
+        points.reverse();
+        tx_points.reverse();
+        (points, tx_points)
     }
 
     /// One row of equal-width module shortcuts.

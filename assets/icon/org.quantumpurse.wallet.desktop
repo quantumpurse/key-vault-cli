@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Quantum Purse
+Comment=Post-quantum CKB wallet
+Exec=qpv2-gui
+Icon=org.quantumpurse.wallet
+Terminal=false
+Categories=Finance;Network;
+StartupWMClass=org.quantumpurse.wallet

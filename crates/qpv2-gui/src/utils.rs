@@ -115,6 +115,14 @@ pub(crate) fn format_ckb_balance(shannons: u64) -> String {
     }
 }
 
+/// Current Unix time in whole seconds (0 if the clock is pre-epoch).
+pub(crate) fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 /// Format a Unix timestamp as relative time ("3h ago", "1d ago").
 pub(crate) fn format_relative_time(timestamp_secs: u64) -> String {
     let now = std::time::SystemTime::now()

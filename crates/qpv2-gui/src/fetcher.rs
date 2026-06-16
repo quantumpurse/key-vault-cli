@@ -48,6 +48,21 @@ fn retry_until_ready<T, E: Display>(tag: &str, mut f: impl FnMut() -> Result<Opt
     }
 }
 
+/// Parses the port out of an RPC URL (`http://host:port` or
+/// `https://host:port`). Returns `None` on malformed input or when
+/// the URL has no explicit port (we deliberately don't fall back to
+/// scheme defaults — those would be hardcoded protocol artifacts,
+/// not data from the endpoint).
+fn parse_rpc_port(url: &str) -> Option<u16> {
+    let stripped = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    let host_port = stripped.split('/').next().unwrap_or(stripped);
+    let (_, port) = host_port.rsplit_once(':')?;
+    port.parse().ok()
+}
+
 impl App {
     /// Kick off background queries for deposited + prepared DAO cells across all accounts.
     pub(crate) fn fetch_dao_cells(&mut self) {
@@ -701,19 +716,27 @@ impl App {
             let _ = tx.send(Ok(status) as NodeStatusUpdate);
         });
     }
-}
 
-/// Parses the port out of an RPC URL (`http://host:port` or
-/// `https://host:port`). Returns `None` on malformed input or when
-/// the URL has no explicit port (we deliberately don't fall back to
-/// scheme defaults — those would be hardcoded protocol artifacts,
-/// not data from the endpoint).
-pub(crate) fn parse_rpc_port(url: &str) -> Option<u16> {
-    let stripped = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url);
-    let host_port = stripped.split('/').next().unwrap_or(stripped);
-    let (_, port) = host_port.rsplit_once(':')?;
-    port.parse().ok()
+    /// Kick off a rebuild of the QR-lock adoption series in a
+    /// background thread; the chain query lives in ckb-node. Schedules
+    /// the next attempt up front — `poll_qr_adoption` shortens the
+    /// schedule when this one fails.
+    pub(crate) fn fetch_qr_adoption(&mut self) {
+        if self.qr_adoption_rx.is_some() {
+            return;
+        }
+        /// ~3 months of weekly points.
+        const WEEKS: u64 = 13;
+        self.qr_adoption_next_fetch = Some(std::time::Instant::now() + crate::QR_ADOPTION_INTERVAL);
+        let network = self.qp_client.network();
+
+        let (tx, rx) = mpsc::channel();
+        self.qr_adoption_rx = Some(rx);
+        std::thread::spawn(move || {
+            let result =
+                ckb_node::wallet_helpers::queries::fetch_qr_adoption_series(network, WEEKS)
+                    .map_err(|e| e.to_string());
+            let _ = tx.send(result);
+        });
+    }
 }

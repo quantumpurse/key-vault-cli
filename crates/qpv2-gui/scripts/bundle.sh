@@ -116,6 +116,10 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$TARGET_DIR/$BINARY_NAME" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
 cp "$LIGHT_CLIENT_BIN" "$APP_BUNDLE/Contents/MacOS/$LIGHT_CLIENT_NAME"
 cp "$FULL_NODE_BIN" "$APP_BUNDLE/Contents/MacOS/$FULL_NODE_NAME"
+
+# App icon (the Dock / Finder / Launchpad icon). Must be in place before
+# sign.sh runs, since codesign seals the Resources directory.
+cp "$PROJECT_ROOT/assets/icon/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 if [ "$BUNDLE_PINENTRY" = "true" ]; then
     cp -R "$PINENTRY_APP_SRC" "$APP_BUNDLE/Contents/MacOS/$PINENTRY_APP_NAME"
 fi
@@ -131,6 +135,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 	<string>${APP_NAME}</string>
 	<key>CFBundleExecutable</key>
 	<string>${BINARY_NAME}</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>${BUNDLE_ID}</string>
 	<key>CFBundleInfoDictionaryVersion</key>

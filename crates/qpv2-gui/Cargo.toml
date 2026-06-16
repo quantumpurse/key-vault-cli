@@ -28,3 +28,8 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tracing-appender = "0.2"
 names = { version = "0.14.0", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# Embeds the app icon (assets/icon/icon.ico) into the Windows .exe so it
+# shows in Explorer and the taskbar. Windows-only; not fetched elsewhere.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

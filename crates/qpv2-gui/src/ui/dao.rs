@@ -7,7 +7,7 @@ use super::utils::{
     badge, ckb_split, extract_ar, format_duration_ms, ghost_button, panel_frame, row_hover,
     section_header,
 };
-use crate::types::{display_font, label_font, AppColors, DaoView, TransactionStatus};
+use crate::types::{display_font, label_font, AppColors, DaoView, Status, TransactionStatus};
 use crate::utils::{format_ckb, format_ckb_balance};
 use crate::App;
 
@@ -46,11 +46,24 @@ impl App {
                     .iter()
                     .map(|(_, c)| c.capacity)
                     .sum();
-                let total_earned: u64 = self
+                // Prepared cells carry a locked-in payout; their interest
+                // is exact (maximum_withdraw − principal).
+                let prepared_earned: u64 = self
                     .dao_prepared_cells
                     .iter()
                     .map(|(_, c)| c.maximum_withdraw.saturating_sub(c.capacity))
                     .sum();
+                // Deposited cells are still earning. Their interest is
+                // estimated from AR growth to tip — the same per-row
+                // figure the positions table shows. Omitting it made the
+                // headline understate earnings by everything not yet
+                // prepared for withdrawal.
+                let deposited_earned: u64 = self
+                    .dao_deposited_cells
+                    .iter()
+                    .filter_map(|(_, c)| self.estimated_deposit_interest(c))
+                    .sum();
+                let total_earned = prepared_earned + deposited_earned;
                 let active_cells = self.dao_deposited_cells.len() + self.dao_prepared_cells.len();
                 let total_locked = total_deposited + total_prepared_principal;
 
@@ -137,8 +150,16 @@ impl App {
             });
             stat_divider(ui, c, pad);
 
+            // Once deposited cells contribute, the total is an estimate
+            // (their payout is taken at a future epoch), so it carries
+            // the same "~" the per-row figures use.
+            let earned_prefix = if self.dao_deposited_cells.is_empty() {
+                "+"
+            } else {
+                "~+"
+            };
             stat_cell(ui, c, col_w, "CKB EARNED", |ui| {
-                stat_ckb_value(ui, c, "+", total_earned, c.accent2);
+                stat_ckb_value(ui, c, earned_prefix, total_earned, c.accent2);
             });
             stat_divider(ui, c, pad);
 
@@ -159,6 +180,18 @@ impl App {
                 );
             });
         });
+    }
+
+    /// Estimated DAO interest for one deposited cell: the principal
+    /// scaled by the accumulated-rate growth from the cell's deposit
+    /// header to the current tip. `None` until both headers are cached.
+    /// The realized payout lands at a future epoch boundary, so callers
+    /// present this value as an estimate ("~").
+    pub(crate) fn estimated_deposit_interest(&self, cell: &ckb_node::DepositedCell) -> Option<u64> {
+        let dep_h = self.deposit_headers.get(&cell.block_number)?;
+        let tip_h = self.node_status.tip_header.as_ref()?;
+        let growth = extract_ar(tip_h) / extract_ar(dep_h);
+        Some((cell.capacity as f64 * (growth - 1.0)) as u64)
     }
 
     /// Renders the DAO deposit form as a centered modal overlay.
@@ -548,6 +581,8 @@ impl App {
         // (avoid borrow conflicts).
         let mut prepare_action: Option<(ckb_types::packed::OutPoint, String)> = None;
         let mut withdraw_action: Option<(ckb_types::packed::OutPoint, String)> = None;
+        // The clicked outpoint, copied to the clipboard after the loop.
+        let mut copied_outpoint: Option<String> = None;
 
         // Helper: find the account index for a given lock_args.
         let account_index =
@@ -561,18 +596,22 @@ impl App {
         let full_w = ui.available_width();
         let gap = 10.0;
         let w_acct = 64.0;
+        let w_amount = 150.0;
+        let w_earned = 140.0;
         let w_age = 96.0;
         let w_state = 96.0;
         let w_action = 104.0;
-        let flex = ((full_w - w_acct - w_age - w_state - w_action - 5.0 * gap) / 2.0).max(110.0);
-        let widths = [w_acct, flex, flex, w_age, w_state, w_action];
+        // The outpoint carries a full 32-byte tx hash, so it takes the
+        // flex slot; the numeric columns are fixed since their values
+        // never get that wide.
+        let w_outpoint =
+            (full_w - w_acct - w_amount - w_earned - w_age - w_state - w_action - 6.0 * gap)
+                .max(200.0);
+        let widths = [
+            w_acct, w_outpoint, w_amount, w_earned, w_age, w_state, w_action,
+        ];
         let titles = [
-            "ACCOUNT",
-            "AMOUNT",
-            "EARNED",
-            "AGE/EPOCH",
-            "STATE",
-            "ACTION",
+            "ACCOUNT", "OUTPOINT", "AMOUNT", "EARNED", "AGE", "STATE", "ACTION",
         ];
 
         // Header row.
@@ -616,22 +655,18 @@ impl App {
                     );
                 });
 
-                cell_ui(ui, widths[1], ROW_H, |ui| {
+                if let Some(op) = outpoint_cell(ui, &self.colors, widths[1], &cell.out_point) {
+                    copied_outpoint = Some(op);
+                }
+
+                cell_ui(ui, widths[2], ROW_H, |ui| {
                     ckb_amount(ui, &self.colors, "", cell.capacity, self.colors.text);
                 });
 
-                // Estimated earned from cached deposit header + tip.
-                let estimated = self
-                    .deposit_headers
-                    .get(&cell.block_number)
-                    .zip(self.node_status.tip_header.as_ref())
-                    .map(|(dep_h, tip_h)| {
-                        let ar_dep = extract_ar(dep_h);
-                        let ar_tip = extract_ar(tip_h);
-                        let growth = ar_tip / ar_dep;
-                        (cell.capacity as f64 * (growth - 1.0)) as u64
-                    });
-                cell_ui(ui, widths[2], ROW_H, |ui| match estimated {
+                // Estimated earned from cached deposit header + tip — the
+                // same figure summed into the panel's CKB EARNED stat.
+                let estimated = self.estimated_deposit_interest(cell);
+                cell_ui(ui, widths[3], ROW_H, |ui| match estimated {
                     Some(earned) => {
                         ckb_amount(ui, &self.colors, "~+", earned, self.colors.accent2);
                     }
@@ -654,7 +689,7 @@ impl App {
                         format_duration_ms(ms, false)
                     })
                     .unwrap_or_else(|| "--".to_string());
-                cell_ui(ui, widths[3], ROW_H, |ui| {
+                cell_ui(ui, widths[4], ROW_H, |ui| {
                     ui.label(
                         egui::RichText::new(duration_str)
                             .size(11.0)
@@ -662,11 +697,11 @@ impl App {
                     );
                 });
 
-                cell_ui(ui, widths[4], ROW_H, |ui| {
+                cell_ui(ui, widths[5], ROW_H, |ui| {
                     badge(ui, "DEPOSITED", self.colors.accent);
                 });
 
-                cell_ui(ui, widths[5], ROW_H, |ui| {
+                cell_ui(ui, widths[6], ROW_H, |ui| {
                     if ui
                         .add_enabled(
                             !is_busy,
@@ -705,12 +740,16 @@ impl App {
                     );
                 });
 
-                cell_ui(ui, widths[1], ROW_H, |ui| {
+                if let Some(op) = outpoint_cell(ui, &self.colors, widths[1], &cell.out_point) {
+                    copied_outpoint = Some(op);
+                }
+
+                cell_ui(ui, widths[2], ROW_H, |ui| {
                     ckb_amount(ui, &self.colors, "", cell.capacity, self.colors.text);
                 });
 
                 let earned = cell.maximum_withdraw.saturating_sub(cell.capacity);
-                cell_ui(ui, widths[2], ROW_H, |ui| {
+                cell_ui(ui, widths[3], ROW_H, |ui| {
                     ckb_amount(ui, &self.colors, "+", earned, self.colors.accent2);
                 });
 
@@ -719,7 +758,7 @@ impl App {
                     .prepare_header
                     .timestamp()
                     .saturating_sub(cell.deposit_header.timestamp());
-                cell_ui(ui, widths[3], ROW_H, |ui| {
+                cell_ui(ui, widths[4], ROW_H, |ui| {
                     ui.label(
                         egui::RichText::new(format_duration_ms(ms, false))
                             .size(11.0)
@@ -727,11 +766,11 @@ impl App {
                     );
                 });
 
-                cell_ui(ui, widths[4], ROW_H, |ui| {
+                cell_ui(ui, widths[5], ROW_H, |ui| {
                     badge(ui, "PREPARED", self.colors.warn);
                 });
 
-                cell_ui(ui, widths[5], ROW_H, |ui| {
+                cell_ui(ui, widths[6], ROW_H, |ui| {
                     if ui
                         .add_enabled(
                             !is_busy,
@@ -751,6 +790,10 @@ impl App {
         }
         if let Some((out_point, lock_args)) = withdraw_action {
             self.dao_withdraw_async(out_point, lock_args);
+        }
+        if let Some(op) = copied_outpoint {
+            ui.ctx().copy_text(op);
+            self.status = Status::Info("Outpoint copied!".to_string());
         }
     }
 }
@@ -834,6 +877,42 @@ fn ckb_amount(
             .size(11.5)
             .color(colors.text_muted),
     );
+}
+
+/// Outpoint cell: a truncating, copy-on-click `0x<tx_hash>:<index>`. The
+/// hash rarely fits at narrow widths, so the full value is always on the
+/// hover tooltip and the clipboard. Returns the string to copy when the
+/// cell is clicked.
+fn outpoint_cell(
+    ui: &mut egui::Ui,
+    colors: &AppColors,
+    w: f32,
+    out_point: &ckb_types::packed::OutPoint,
+) -> Option<String> {
+    use ckb_types::prelude::*;
+    let tx_hash: ckb_types::H256 = out_point.tx_hash().unpack();
+    let index: u32 = out_point.index().unpack();
+    let text = format!("0x{}:{}", hex::encode(tx_hash.as_bytes()), index);
+
+    let mut clicked = None;
+    cell_ui(ui, w, ROW_H, |ui| {
+        let resp = ui
+            .add(
+                egui::Label::new(
+                    egui::RichText::new(text.clone())
+                        .font(egui::FontId::proportional(10.0))
+                        .color(colors.text_muted),
+                )
+                .truncate()
+                .sense(egui::Sense::click()),
+            )
+            .on_hover_text(text.clone())
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        if resp.clicked() {
+            clicked = Some(text);
+        }
+    });
+    clicked
 }
 
 /// Fixed-size table cell with vertically centered content.

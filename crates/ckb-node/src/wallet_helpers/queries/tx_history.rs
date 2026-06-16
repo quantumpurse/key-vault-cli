@@ -1,12 +1,12 @@
 //! Transaction history queries for QuantumPurse lock scripts.
 
 use crate::client::QpClient;
-use crate::config::NetworkType;
 use crate::error::NodeManagerError;
+use crate::wallet_helpers::utils::build_qr_lock_script;
 use ckb_jsonrpc_types::JsonBytes;
 use ckb_sdk::rpc::ckb_indexer::{Order, ScriptType, SearchKey, SearchKeyFilter, Tx};
 
-/// Queries all transactions for a QuantumPurse lock script via the indexer.
+/// Queries all transactions for a Quantum Resistant lock script via the indexer.
 ///
 /// Paginates through the full result set using `last_cursor`. Returns grouped
 /// `Tx` entries in descending order (newest first), one per unique transaction.
@@ -16,47 +16,7 @@ pub fn fetch_recent_transactions(
     after_block: Option<u64>,
     limit: Option<usize>,
 ) -> Result<Vec<Tx>, NodeManagerError> {
-    let (code_hash_str, hash_type_str) = match qp_client.network() {
-        NetworkType::Mainnet => (
-            qpv2_core::constants::CKB_MAINNET_CODE_HASH,
-            qpv2_core::constants::CKB_MAINNET_HASH_TYPE,
-        ),
-        NetworkType::Testnet => (
-            qpv2_core::constants::CKB_TESTNET_CODE_HASH,
-            qpv2_core::constants::CKB_TESTNET_HASH_TYPE,
-        ),
-    };
-
-    let script_hash_type = match hash_type_str {
-        "type" => ckb_jsonrpc_types::ScriptHashType::Type,
-        "data1" => ckb_jsonrpc_types::ScriptHashType::Data1,
-        _ => ckb_jsonrpc_types::ScriptHashType::Data,
-    };
-
-    let code_hash = code_hash_str.strip_prefix("0x").unwrap_or(code_hash_str);
-    let code_hash_bytes: [u8; 32] = {
-        let bytes = hex::decode(code_hash)
-            .map_err(|e| NodeManagerError::RpcError(format!("Invalid code hash hex: {}", e)))?;
-        if bytes.len() != 32 {
-            return Err(NodeManagerError::RpcError(format!(
-                "Code hash must be 32 bytes, got {}.",
-                bytes.len()
-            )));
-        }
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&bytes);
-        arr
-    };
-
-    let lock_args_clean = lock_args_hex.strip_prefix("0x").unwrap_or(lock_args_hex);
-    let args_bytes = hex::decode(lock_args_clean)
-        .map_err(|e| NodeManagerError::RpcError(format!("Invalid lock args hex: {}", e)))?;
-
-    let script = ckb_jsonrpc_types::Script {
-        code_hash: ckb_types::H256(code_hash_bytes),
-        hash_type: script_hash_type,
-        args: JsonBytes::from_bytes(args_bytes.into()),
-    };
+    let script = build_qr_lock_script(qp_client.network(), lock_args_hex)?;
 
     let search_key = SearchKey {
         script,

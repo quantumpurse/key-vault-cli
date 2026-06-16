@@ -2,6 +2,7 @@
 
 mod fetcher;
 mod poller;
+mod qr_adoption;
 mod transactor;
 mod tx_history;
 mod types;
@@ -24,6 +25,13 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How long a non-None status banner stays visible before auto-clearing.
 const STATUS_DURATION: Duration = Duration::from_secs(5);
+
+/// Cadence for rebuilding the QR-lock adoption series — it pages every
+/// live QR cell, so refresh sparingly; the data is weekly-grained.
+pub(crate) const QR_ADOPTION_INTERVAL: Duration = Duration::from_secs(1800);
+/// Retry delay after a failed adoption fetch (transient RPC errors
+/// shouldn't strand the UI in "Querying..." for the full interval).
+pub(crate) const QR_ADOPTION_RETRY: Duration = Duration::from_secs(300);
 
 use types::{
     AppColors, BalanceResult, DaoQueryResult, DaoView, NodeStatus, NodeStatusUpdate, Screen,
@@ -118,8 +126,8 @@ pub(crate) struct App {
     pub(crate) dao_deposited_cells: Vec<(String, ckb_node::DepositedCell)>,
     pub(crate) dao_prepared_cells: Vec<(String, ckb_node::PreparedCell)>,
     // Staging vectors: accumulated during polling, swapped into display on Done.
-    dao_deposited_staging: Vec<(String, ckb_node::DepositedCell)>,
-    dao_prepared_staging: Vec<(String, ckb_node::PreparedCell)>,
+    pub(crate) dao_deposited_staging: Vec<(String, ckb_node::DepositedCell)>,
+    pub(crate) dao_prepared_staging: Vec<(String, ckb_node::PreparedCell)>,
     pub(crate) dao_cells_query_rx: Option<mpsc::Receiver<DaoQueryResult>>,
     // Immutable deposit block headers for DAO interest estimation.
     // Keyed by block number; fetched once per deposit, never expires.
@@ -136,6 +144,21 @@ pub(crate) struct App {
     // see `App::tx_history_watermark()`.
     pub(crate) tx_history: Vec<TxRecord>,
     pub(crate) tx_history_rx: Option<mpsc::Receiver<Result<TxHistoryEvent, String>>>,
+
+    // ── QR-lock adoption (dashboard side panel) ──
+    // Weekly series of CKB locked under the Quantum Resistant lock script,
+    // reconstructed from live cells' creation blocks via a public RPC
+    // indexer (the light client can only see its registered scripts).
+    pub(crate) qr_adoption_series: Vec<(u64, u64)>,
+    pub(crate) qr_adoption_rx: Option<mpsc::Receiver<Result<Vec<(u64, u64)>, String>>>,
+    /// When the next series rebuild is due; None = due now.
+    pub(crate) qr_adoption_next_fetch: Option<std::time::Instant>,
+
+    /// Memoized dashboard balance chart: key is (tx count, live total,
+    /// 10s time bucket); values are the line points and tx dot points.
+    /// Rebuilding from the whole tape every frame is wasted work.
+    #[allow(clippy::type_complexity)]
+    pub(crate) balance_chart_cache: Option<((usize, u64, u64), Vec<(u64, u64)>, Vec<(u64, u64)>)>,
 
     // Node Manager tab — latest cached snapshot + in-flight refresh.
     pub(crate) node_status: NodeStatus,
@@ -429,6 +452,10 @@ impl App {
             dao_deposit_all: false,
             tx_history: Vec::new(),
             tx_history_rx: None,
+            qr_adoption_series: qr_adoption::load_series(node_config.network.tag()),
+            qr_adoption_rx: None,
+            qr_adoption_next_fetch: None,
+            balance_chart_cache: None,
             node_status: NodeStatus {
                 online: true,
                 ..NodeStatus::default()
@@ -509,6 +536,7 @@ impl eframe::App for App {
             self.poll_tx_history();
             self.poll_node_status();
             self.poll_earliest_funding_block();
+            self.poll_qr_adoption();
         }
 
         // Periodic refresh of balances, transaction history, DAO cells,
@@ -519,6 +547,22 @@ impl eframe::App for App {
             self.fetch_tx_history(true);
             self.fetch_dao_cells();
             self.fetch_node_status();
+
+            // Adoption series rebuild, on its own schedule.
+            if self
+                .qr_adoption_next_fetch
+                .map_or(true, |t| std::time::Instant::now() >= t)
+            {
+                // A fetch still in flight past its whole schedule means
+                // the connection hung (the sync RPC client has no
+                // timeout) — abandon it rather than freeze the series
+                // for the session.
+                if self.qr_adoption_rx.is_some() {
+                    tracing::warn!("qr adoption: abandoning stalled fetch");
+                    self.qr_adoption_rx = None;
+                }
+                self.fetch_qr_adoption();
+            }
         }
 
         // Show popups / modals if open.
@@ -590,7 +634,20 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1100.0, 600.0])
             .with_min_inner_size([1100.0, 600.0])
-            .with_title("Quantum Purse"),
+            .with_title("Quantum Purse")
+            // Wayland resolves the launcher icon by matching this to the
+            // installed .desktop file; keep it equal to the bundle id and
+            // the .desktop basename (org.quantumpurse.wallet.desktop).
+            .with_app_id("org.quantumpurse.wallet")
+            // Live-window icon: the taskbar / Alt-Tab icon on Windows and
+            // X11. The macOS Dock uses the bundle's AppIcon.icns instead,
+            // and Wayland uses the app_id above — both ignore this.
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!(
+                    "../../../assets/icon/icon-256.png"
+                ))
+                .expect("bundled app icon is a valid PNG"),
+            ),
         ..Default::default()
     };
 

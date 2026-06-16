@@ -20,7 +20,17 @@ fn main() {
     stage_pinentry_linux();
 
     #[cfg(target_os = "windows")]
-    stage_pinentry_windows();
+    {
+        stage_pinentry_windows();
+
+        // Embed the app icon into the .exe (Explorer file icon + the
+        // default taskbar icon). Path is relative to this crate's root.
+        println!("cargo:rerun-if-changed=../../assets/icon/icon.ico");
+        winresource::WindowsResource::new()
+            .set_icon("../../assets/icon/icon.ico")
+            .compile()
+            .expect("embed Windows app icon");
+    }
 }
 
 fn profile_dir() -> Option<PathBuf> {

@@ -130,16 +130,9 @@ impl App {
         ui.horizontal_centered(|ui| {
             ui.add_space(12.0);
 
-            // Ident block.
-            let (logo, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
-            ui.painter().rect_filled(logo, 0.0, c_accent);
-            ui.painter().text(
-                logo.center(),
-                egui::Align2::CENTER_CENTER,
-                "Q",
-                display_font(12.0),
-                c_bg,
-            );
+            // Ident block: the qp∞ mark knocked out of the accent chip.
+            let (logo, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+            draw_qp_logo_chip(ui.painter(), logo, c_accent, c_bg);
             ui.add_space(8.0);
             ui.label(
                 egui::RichText::new("QUANTUM PURSE")
@@ -201,10 +194,10 @@ impl App {
                 t,
             );
             ui.painter().text(
-                seg.rect.right_center() + egui::vec2(2.0, 1.0),
+                seg.rect.right_center() + egui::vec2(2.0, 0.0),
                 egui::Align2::LEFT_CENTER,
                 "▾",
-                egui::FontId::proportional(8.0),
+                egui::FontId::proportional(16.0),
                 c_muted,
             );
             ui.add_space(10.0);
@@ -286,9 +279,23 @@ impl App {
                     Some(v) => format!("{} / {}", self.wallet_name.to_uppercase(), v),
                     None => self.wallet_name.to_uppercase(),
                 };
+                // Dropdown arrow, mirroring the node selector's. RTL
+                // flow: allocated before the segment so it renders to
+                // the segment's right, clear of the LOCK button.
+                let (arrow, arrow_resp) = ui.allocate_exact_size(
+                    egui::vec2(14.0, TELEMETRY_H - 10.0),
+                    egui::Sense::click(),
+                );
+                ui.painter().text(
+                    arrow.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "▾",
+                    egui::FontId::proportional(16.0),
+                    c_muted,
+                );
                 let seg = self.strip_segment(ui, "VAULT", &wallet_text, None, None, t);
                 self.wallet_selector_rect = Some(seg.rect);
-                if seg.clicked() {
+                if seg.clicked() || arrow_resp.clicked() {
                     self.wallet_selector_open = !self.wallet_selector_open;
                     self.node_selector_open = false;
                 }
@@ -507,7 +514,12 @@ impl App {
         let panel_w = 680.0;
 
         ui.vertical_centered(|ui| {
-            ui.add_space(40.0);
+            ui.add_space(32.0);
+
+            // The qp∞ mark at full size — the one place it gets room.
+            let (logo, _) = ui.allocate_exact_size(egui::vec2(56.0, 56.0), egui::Sense::hover());
+            draw_qp_logo_chip(ui.painter(), logo, self.colors.accent, self.colors.bg);
+            ui.add_space(10.0);
 
             ui.label(
                 egui::RichText::new("QUANTUM PURSE")
@@ -805,6 +817,55 @@ fn boot_lines(
     let (rect, _) = ui.allocate_exact_size(full.size(), egui::Sense::hover());
     ui.painter()
         .text(rect.left_top(), egui::Align2::LEFT_TOP, typed, font, color);
+}
+
+/// The Quantum Purse mark: two rings forming a centred figure-eight (the
+/// qp∞ infinity) with short q/p descenders dropping from the crossing.
+/// A procedural rebuild of `assets/icon/icon.svg` — painter strokes only,
+/// so it is resolution-independent and identical across platforms with no
+/// font or image asset involved. Fractions are relative to the (square)
+/// chip rect.
+fn draw_qp_mark(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
+    let s = rect.width().min(rect.height());
+    let o = rect.left_top();
+    let p = |x: f32, y: f32| egui::pos2(o.x + x * s, o.y + y * s);
+
+    // The two infinity lobes, vertically centred.
+    let ring = egui::Stroke::new((s * 0.066).max(1.4), color);
+    let r = s * 0.198;
+    painter.circle_stroke(p(0.323, 0.5), r, ring);
+    painter.circle_stroke(p(0.677, 0.5), r, ring);
+
+    // Descenders poking out the bottom of the crossing. Drawn longer than
+    // icon.svg's tail (which ends ~0.73) so the tail still reads at the
+    // 22px strip size, where the canonical short tail is sub-pixel.
+    let stem = egui::Stroke::new((s * 0.061).max(1.3), color);
+    painter.line_segment([p(0.481, 0.582), p(0.481, 0.77)], stem);
+    painter.line_segment([p(0.519, 0.582), p(0.519, 0.77)], stem);
+}
+
+/// The app chip: solid accent rounded square with the qp∞ mark knocked
+/// out in the canvas color, mirroring `assets/icon/icon.svg`. The icon's
+/// gradient fill is rendered as a flat accent here — egui has no gradient
+/// fill primitive and the difference is imperceptible at chip size.
+fn draw_qp_logo_chip(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    chip: egui::Color32,
+    mark: egui::Color32,
+) {
+    let s = rect.width().min(rect.height());
+    painter.rect_filled(rect, s * 0.222, chip);
+    draw_qp_mark(painter, rect, mark);
+    // Diagonal weave cut re-shows the chip color through the crossing.
+    // Drawn heavier than icon.svg's thread (0.035) so it still reads at
+    // the 22–56px sizes this chip renders at — a small-size optical bump.
+    let o = rect.left_top();
+    let p = |x: f32, y: f32| egui::pos2(o.x + x * s, o.y + y * s);
+    painter.line_segment(
+        [p(0.448, 0.568), p(0.552, 0.432)],
+        egui::Stroke::new((s * 0.052).max(1.4), chip),
+    );
 }
 
 /// Reveal `text` progressively at `cps` characters per second from the
