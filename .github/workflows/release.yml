@@ -167,7 +167,7 @@ jobs:
         security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
     - name: Bundle app
-      run: crates/qpv2-gui/scripts/bundle.sh --release
+      run: crates/qpv2-gui/scripts/bundle-macos.sh --release
 
     - name: Sign app
       run: crates/qpv2-gui/scripts/sign.sh --release

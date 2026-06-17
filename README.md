@@ -58,38 +58,52 @@ master_seed
 (sphincs+ public_key, sphincs+ private_key)
 ```
 
-### Dependencies
-
-- Rust & Cargo (1.70+)
-
-### Developer Build Toolchain
-
-Local GUI development and build scripts (`build.sh`, `launch.sh`,
-`crates/qpv2-gui/scripts/`) are designed for macOS only. Linux and
-Windows GUI builds are handled by the CI/CD workflow.
-
-The GUI's password dialog (`pinentry`) is built from source via
-`vendor/build-pinentry.sh`. Developers on macOS need:
-
-| Tool | Install | Purpose |
-|------|---------|---------|
-| `automake` | `brew install automake` | Generates Makefiles for C deps |
-| `gettext` | `brew install gettext` | Provides m4 macros for autotools |
-| Xcode CLI tools | `xcode-select --install` | Obj-C compiler + ibtool for nib files |
-
 ### Build & Run
+
+Dependencies: Rust & Cargo (1.70+)
+
 ```shell
-# Build
-./build.sh <cli|gui> [--release] [--sign] [--clean]
-
-# Run
-./launch.sh <cli|gui> [--release]
-
-# Run tests
-cargo test --workspace
+git submodule update --init --recursive
 ```
 
-The CLI build includes codesigning with entitlements, which is required for keychain (`--keychain`) support on macOS. Password-only wallets work without signing.
+##### CLI:
+
+```shell
+cargo build -p qpv2-cli --release
+```
+
+##### GUI:
+
+- ###### macOS
+
+Build toolchain: `brew install automake gettext && xcode-select --install`
+
+```shell
+./build.sh <cli|gui> [--release] [--sign] [--clean]   # gui → target/<profile>/qpv2.app
+./launch.sh <cli|gui> [--release]
+```
+
+- ###### Linux:
+
+```shell
+sudo apt-get install -y gettext libgtk2.0-dev libdbus-1-dev libtss2-dev libudev-dev
+./crates/qpv2-gui/scripts/bundle-linux.sh [--release]
+# → target/<profile>/qpv2-gui-linux-<arch>/  (+ .tar.gz)
+```
+
+- ###### Windows:
+build toolchain: MSYS2 -> In the MSYS2 shell: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`
+
+```powershell
+.\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
+# → target\<profile>\qpv2-gui-windows-x86_64\  (+ .zip)
+```
+
+### Tests
+
+```shell
+cargo test --workspace
+```
 
 ### Use CLI
 
@@ -102,7 +116,7 @@ qpv2-cli --help
 
 Commands that require authentication (export, new account, sign, etc.) auto-detect the wallet's auth method. Password wallets prompt for a password; keychain wallets use the platform's native credential store (Touch ID on macOS, Windows Hello on Windows, TPM on Linux).
 
-### Use GUI
+### Use GUI utilities scripts (Macos only)
 ```shell
 # Launch the dev GUI
 ./launch.sh gui

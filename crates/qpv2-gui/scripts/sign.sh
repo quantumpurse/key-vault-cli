@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Code sign the QPV2 GUI app bundle for macOS.
 #
-# Expects bundle.sh to have already produced the .app at
+# Expects bundle-macos.sh to have already produced the .app at
 # target/{debug,release}/qpv2.app. Signs inner binaries first,
 # then the bundle (Apple recommends against --deep).
 #
@@ -44,7 +44,7 @@ APP_BUNDLE="$TARGET_DIR/$APP_NAME.app"
 
 if [ ! -d "$APP_BUNDLE" ]; then
 	echo "ERROR: App bundle not found at $APP_BUNDLE"
-	echo "       Run bundle.sh first."
+	echo "       Run bundle-macos.sh first."
 	exit 1
 fi
 

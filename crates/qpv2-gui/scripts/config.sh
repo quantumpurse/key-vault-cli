@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared configuration for bundle.sh and sign.sh.
+# Shared configuration for bundle-macos.sh, bundle-linux.sh and sign.sh.
 
 BINARY_NAME="qpv2-gui"
 BUNDLE_ID="org.quantumpurse.wallet"

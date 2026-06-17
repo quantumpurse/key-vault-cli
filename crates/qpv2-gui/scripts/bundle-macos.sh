@@ -5,7 +5,7 @@
 # Info.plist. Run sign.sh afterwards for code signing.
 #
 # Usage:
-#   ./crates/qpv2-gui/scripts/bundle.sh [--release]
+#   ./crates/qpv2-gui/scripts/bundle-macos.sh [--release]
 
 set -euo pipefail
 
