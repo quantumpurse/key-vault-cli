@@ -34,9 +34,9 @@ pub(crate) const QR_ADOPTION_INTERVAL: Duration = Duration::from_secs(1800);
 pub(crate) const QR_ADOPTION_RETRY: Duration = Duration::from_secs(300);
 
 use types::{
-    AppColors, BalanceResult, DaoQueryResult, DaoView, NodeStatus, NodeStatusUpdate, Screen,
-    Status, Tab, TransactionKind, TransactionSendResult, TransactionStatus, TxBuildResult,
-    TxHistoryEvent, TxRecord,
+    AppColors, BalanceChartCache, BalanceResult, DaoQueryResult, DaoView, NodeStatus,
+    NodeStatusUpdate, QrAdoptionUpdate, Screen, Series, Status, Tab, TransactionKind,
+    TransactionSendResult, TransactionStatus, TxBuildResult, TxHistoryEvent, TxRecord,
 };
 
 pub(crate) struct App {
@@ -149,16 +149,13 @@ pub(crate) struct App {
     // Weekly series of CKB locked under the Quantum Resistant lock script,
     // reconstructed from live cells' creation blocks via a public RPC
     // indexer (the light client can only see its registered scripts).
-    pub(crate) qr_adoption_series: Vec<(u64, u64)>,
-    pub(crate) qr_adoption_rx: Option<mpsc::Receiver<Result<Vec<(u64, u64)>, String>>>,
+    pub(crate) qr_adoption_series: Series,
+    pub(crate) qr_adoption_rx: Option<mpsc::Receiver<QrAdoptionUpdate>>,
     /// When the next series rebuild is due; None = due now.
     pub(crate) qr_adoption_next_fetch: Option<std::time::Instant>,
 
-    /// Memoized dashboard balance chart: key is (tx count, live total,
-    /// 10s time bucket); values are the line points and tx dot points.
-    /// Rebuilding from the whole tape every frame is wasted work.
-    #[allow(clippy::type_complexity)]
-    pub(crate) balance_chart_cache: Option<((usize, u64, u64), Vec<(u64, u64)>, Vec<(u64, u64)>)>,
+    /// Memoized dashboard balance chart; see [`BalanceChartCache`].
+    pub(crate) balance_chart_cache: Option<BalanceChartCache>,
 
     // Node Manager tab — latest cached snapshot + in-flight refresh.
     pub(crate) node_status: NodeStatus,
@@ -551,7 +548,7 @@ impl eframe::App for App {
             // Adoption series rebuild, on its own schedule.
             if self
                 .qr_adoption_next_fetch
-                .map_or(true, |t| std::time::Instant::now() >= t)
+                .is_none_or(|t| std::time::Instant::now() >= t)
             {
                 // A fetch still in flight past its whole schedule means
                 // the connection hung (the sync RPC client has no

@@ -7,7 +7,7 @@ use super::utils::{
     breathing_dot, ckb_split, draw_trend_chart, ghost_button, lerp_color, panel_frame, row_hover,
     section_header, value_flash,
 };
-use crate::types::{display_font, label_font, AppColors, Status, Tab, TxKind, TxRecord};
+use crate::types::{display_font, label_font, AppColors, Series, Status, Tab, TxKind, TxRecord};
 use crate::utils::format_relative_time;
 use crate::App;
 
@@ -266,7 +266,7 @@ impl App {
     /// live total. `tx_points` holds one
     /// entry per balance-changing transaction for dot markers; event
     /// timestamps are fixed, so dots never drift between repaints.
-    fn balance_history(&self, current_total: u64, now: u64) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
+    fn balance_history(&self, current_total: u64, now: u64) -> (Series, Series) {
         // Clamp event times below `now`: block headers may run ahead
         // of the local clock (consensus allows ~15s), and the series is
         // headed by the (now, total) anchor — a later event would make

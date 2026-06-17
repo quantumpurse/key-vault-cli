@@ -11,6 +11,21 @@ use serde::{Deserialize, Serialize};
 /// nor overwrite the last good cached value with a fake zero.
 pub(crate) type BalanceResult = (String, Result<u64, String>, Result<u64, String>);
 
+/// One point in a chart time series: `(unix_secs, value_shannons)`.
+pub(crate) type SeriesPoint = (u64, u64);
+
+/// A chart time series: chronological `(timestamp, value)` points, as
+/// consumed by the dashboard balance chart and the QR-adoption (TVL) chart.
+pub(crate) type Series = Vec<SeriesPoint>;
+
+/// Result of the QR-adoption background fetch streamed back to the UI.
+pub(crate) type QrAdoptionUpdate = Result<Series, String>;
+
+/// Memoized dashboard balance chart: `((tx_count, live_total, 10s_bucket),
+/// line_points, dot_points)`. Rebuilding from the whole tape every frame is
+/// wasted work, so the result is cached under the key tuple.
+pub(crate) type BalanceChartCache = ((usize, u64, u64), Series, Series);
+
 /// Identifies which transaction flow owns a shared background operation,
 /// down to the specific DAO operation so mid-flight UI (e.g. the
 /// multisig co-signer panel) can say what is being signed.
@@ -243,7 +258,10 @@ pub(crate) enum TransactionStatus {
     /// Multisig: waiting for co-signer responses.
     AwaitingCoSigners {
         kind: TransactionKind,
-        request: qpv2_core::types::SigningRequest,
+        // Boxed: `SigningRequest` is by far the largest field, and without
+        // the indirection it would bloat every `TransactionStatus` value
+        // (even `Idle`) to its size. See clippy::large_enum_variant.
+        request: Box<qpv2_core::types::SigningRequest>,
         unsigned_tx: ckb_types::core::TransactionView,
         /// Signatures collected so far: (signer_index, raw_sig_bytes).
         signatures: Vec<(usize, Vec<u8>)>,

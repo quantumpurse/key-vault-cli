@@ -896,18 +896,33 @@ fn handle_transfer(
     Ok(())
 }
 
-fn handle_msig_build_dao(
+/// Shared context for the multisig `build-*` CLI handlers: the wallet,
+/// account selector, fee, output path, and network that every variant
+/// needs. Grouping them keeps each handler's own parameter list short.
+struct MsigBuildCtx<'a> {
     wallet_id: u32,
-    lock_args: &str,
+    lock_args: &'a str,
+    fee_rate: u64,
+    output: &'a str,
+    network: &'a str,
+    rpc_url: &'a Option<String>,
+}
+
+fn handle_msig_build_dao(
+    ctx: &MsigBuildCtx,
     op: &str,
     amount: &str,
     tx_hash: Option<&str>,
     index: u32,
-    fee_rate: u64,
-    output: &str,
-    network: &str,
-    rpc_url: &Option<String>,
 ) -> Result<(), String> {
+    let &MsigBuildCtx {
+        wallet_id,
+        lock_args,
+        fee_rate,
+        output,
+        network,
+        rpc_url,
+    } = ctx;
     let account = KeyVault::get_account(wallet_id, lock_args)?
         .ok_or_else(|| format!("Account with lock_args '{}' not found.", lock_args))?;
 
@@ -963,7 +978,7 @@ fn handle_msig_build_dao(
         from_address: from_address.to_string(),
         to_address: None,
         amount_ckb: if op == "deposit" {
-            Some(format!("{}", amount))
+            Some(amount.to_string())
         } else {
             None
         },
@@ -995,16 +1010,15 @@ fn handle_msig_build_dao(
     Ok(())
 }
 
-fn handle_msig_build_transfer(
-    wallet_id: u32,
-    lock_args: &str,
-    to: &str,
-    amount: &str,
-    fee_rate: u64,
-    output: &str,
-    network: &str,
-    rpc_url: &Option<String>,
-) -> Result<(), String> {
+fn handle_msig_build_transfer(ctx: &MsigBuildCtx, to: &str, amount: &str) -> Result<(), String> {
+    let &MsigBuildCtx {
+        wallet_id,
+        lock_args,
+        fee_rate,
+        output,
+        network,
+        rpc_url,
+    } = ctx;
     let account = KeyVault::get_account(wallet_id, lock_args)?
         .ok_or_else(|| format!("Account with lock_args '{}' not found.", lock_args))?;
 
@@ -1052,7 +1066,7 @@ fn handle_msig_build_transfer(
     let metadata = qpv2_core::types::SigningMetadata {
         from_address: from_address.to_string(),
         to_address: Some(to.to_string()),
-        amount_ckb: Some(format!("{}", amount)),
+        amount_ckb: Some(amount.to_string()),
         tx_type: "Transfer".to_string(),
     };
 
@@ -1615,7 +1629,16 @@ fn main() -> Result<(), String> {
                     output,
                 } => {
                     handle_msig_build_transfer(
-                        wallet_id, &lock_args, &to, &amount, fee_rate, &output, &network, &rpc_url,
+                        &MsigBuildCtx {
+                            wallet_id,
+                            lock_args: &lock_args,
+                            fee_rate,
+                            output: &output,
+                            network: &network,
+                            rpc_url: &rpc_url,
+                        },
+                        &to,
+                        &amount,
                     )?;
                 }
                 MsigCommands::BuildDeposit {
@@ -1625,8 +1648,18 @@ fn main() -> Result<(), String> {
                     output,
                 } => {
                     handle_msig_build_dao(
-                        wallet_id, &lock_args, "deposit", &amount, None, 0, fee_rate, &output,
-                        &network, &rpc_url,
+                        &MsigBuildCtx {
+                            wallet_id,
+                            lock_args: &lock_args,
+                            fee_rate,
+                            output: &output,
+                            network: &network,
+                            rpc_url: &rpc_url,
+                        },
+                        "deposit",
+                        &amount,
+                        None,
+                        0,
                     )?;
                 }
                 MsigCommands::BuildPrepare {
@@ -1637,16 +1670,18 @@ fn main() -> Result<(), String> {
                     output,
                 } => {
                     handle_msig_build_dao(
-                        wallet_id,
-                        &lock_args,
+                        &MsigBuildCtx {
+                            wallet_id,
+                            lock_args: &lock_args,
+                            fee_rate,
+                            output: &output,
+                            network: &network,
+                            rpc_url: &rpc_url,
+                        },
                         "prepare",
                         "0", // Unused: only the deposit op takes an amount.
                         Some(&tx_hash),
                         index,
-                        fee_rate,
-                        &output,
-                        &network,
-                        &rpc_url,
                     )?;
                 }
                 MsigCommands::BuildWithdraw {
@@ -1657,16 +1692,18 @@ fn main() -> Result<(), String> {
                     output,
                 } => {
                     handle_msig_build_dao(
-                        wallet_id,
-                        &lock_args,
+                        &MsigBuildCtx {
+                            wallet_id,
+                            lock_args: &lock_args,
+                            fee_rate,
+                            output: &output,
+                            network: &network,
+                            rpc_url: &rpc_url,
+                        },
                         "withdraw",
                         "0", // Unused: only the deposit op takes an amount.
                         Some(&tx_hash),
                         index,
-                        fee_rate,
-                        &output,
-                        &network,
-                        &rpc_url,
                     )?;
                 }
                 MsigCommands::Sign { request, output } => {

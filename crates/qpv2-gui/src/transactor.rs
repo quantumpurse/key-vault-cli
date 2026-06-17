@@ -729,7 +729,7 @@ impl App {
 
             self.tx_status = TransactionStatus::AwaitingCoSigners {
                 kind,
-                request,
+                request: Box::new(request),
                 unsigned_tx,
                 signatures: vec![(signer_index, raw_sig)],
                 import_response_json: String::new(),

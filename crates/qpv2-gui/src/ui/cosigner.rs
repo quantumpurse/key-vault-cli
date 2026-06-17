@@ -134,7 +134,9 @@ impl App {
                 ..
             } => (
                 *kind,
-                request.clone(),
+                // `request` is `&Box<SigningRequest>`; clone the inner value
+                // so the local stays a plain `SigningRequest`.
+                request.as_ref().clone(),
                 signatures.len(),
                 request.multisig_config.threshold as usize,
             ),
