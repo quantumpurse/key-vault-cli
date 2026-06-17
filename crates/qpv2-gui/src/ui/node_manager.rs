@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::types::{display_font, label_font, Status};
 use crate::ui::utils::{
-    breathing_dot, ckb_split, data_row, data_row_colored, draw_series_chart, ghost_button,
+    breathing_dot, ckb_split, data_row, data_row_colored, draw_trend_chart, ghost_button,
     group_thousands, lerp_color, panel_frame, row_hover, section_header, value_flash,
 };
 use crate::App;
@@ -153,12 +153,11 @@ impl App {
                 );
                 ui.add_space(8.0);
 
-                draw_series_chart(
+                draw_trend_chart(
                     ui,
                     &self.colors,
                     &self.qr_adoption_series,
                     110.0,
-                    Some(&self.qr_adoption_series),
                     "QUERYING PUBLIC INDEXER",
                     "Network-wide CKB under the quantum-resistant lock, weekly, \
                      reconstructed from live cells via public RPC.",

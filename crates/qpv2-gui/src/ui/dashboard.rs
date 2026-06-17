@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use super::utils::{
-    breathing_dot, ckb_split, draw_series_chart, ghost_button, lerp_color, panel_frame, row_hover,
+    breathing_dot, ckb_split, draw_trend_chart, ghost_button, lerp_color, panel_frame, row_hover,
     section_header, value_flash,
 };
 use crate::types::{display_font, label_font, AppColors, Status, Tab, TxKind, TxRecord};
@@ -165,19 +165,12 @@ impl App {
                         let (h, d) = self.balance_history(total_shannons, now);
                         self.balance_chart_cache = Some((key, h, d));
                     }
-                    let (_, history, tx_dots) =
-                        self.balance_chart_cache.as_ref().expect("set above");
-                    // Dots stay while they're legible: at least ~18px
-                    // apart on average at the current chart width. Past
-                    // that density the line alone tells the story.
-                    let max_dots = (chart_w / 18.0).max(4.0) as usize;
-                    let dots = (tx_dots.len() <= max_dots).then_some(tx_dots.as_slice());
-                    draw_series_chart(
+                    let (_, history, _) = self.balance_chart_cache.as_ref().expect("set above");
+                    draw_trend_chart(
                         ui,
                         &self.colors,
                         history,
-                        92.0,
-                        dots,
+                        96.0,
                         "NO SYNCED HISTORY YET",
                         "Your total balance over synced history.",
                     );

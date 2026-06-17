@@ -580,20 +580,20 @@ fn log_line(
     });
 }
 
-/// Borderless sparkline shared by the dashboard's balance history and
-/// the Networks screen's adoption chart: flat-tint area + accent line,
-/// optional per-point dots, min/max captions in whole CKB, and a time
-/// axis row (series start date / NOW) beneath. The surrounding panel
-/// provides the frame; the chart draws none of its own.
-pub(crate) fn draw_series_chart(
+/// A compact trend chart: a single gradient area line coloured by its
+/// net trend — green when the series rises over its window, red when
+/// it falls, cyan when flat — so the chart itself answers "which way is
+/// this going?" before a number is read. A headline callout states the
+/// change (signed CKB delta, percent, and the window's start date) and a
+/// clean endpoint dot marks the latest value. No axes, gridlines, or
+/// per-point markers; the trend and the one callout sentence carry the
+/// whole story. Shared by the dashboard's balance history and the
+/// Networks screen's QR-adoption (TVL) chart.
+pub(crate) fn draw_trend_chart(
     ui: &mut egui::Ui,
     colors: &AppColors,
     series: &[(u64, u64)],
     height: f32,
-    // Points to mark with dots — the full series for evenly sampled
-    // data, or just the event points when the series carries synthetic
-    // step edges (the balance chart).
-    dots: Option<&[(u64, u64)]>,
     placeholder: &str,
     hover: &str,
 ) {
@@ -602,10 +602,9 @@ pub(crate) fn draw_series_chart(
         egui::Sense::hover(),
     );
     resp.on_hover_text(hover);
-    let painter = ui.painter();
 
     if series.len() < 2 {
-        painter.text(
+        ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
             placeholder,
@@ -615,87 +614,147 @@ pub(crate) fn draw_series_chart(
         return;
     }
 
-    let inner = rect.shrink(8.0);
+    let t = ui.input(|i| i.time) as f32;
+    let painter = ui.painter();
+
+    // The callout claims a header band; the trace takes the rest. The
+    // right inset reserves room for the endpoint dot's halo so it never
+    // clips the panel edge.
+    let callout_h = 18.0;
+    let plot = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + 1.0, rect.top() + callout_h + 2.0),
+        egui::pos2(rect.right() - 8.0, rect.bottom() - 3.0),
+    );
+
+    // ── Geometry. Fractions clamp so a point beyond the series' own range
+    // (e.g. a block timestamp ahead of the clock) pins to the plot edge. ──
     let (t0, _) = series[0];
     let (t1, _) = series[series.len() - 1];
     let t_span = (t1.saturating_sub(t0)).max(1) as f32;
     let v_min = series.iter().map(|&(_, v)| v).min().unwrap_or(0);
     let v_max = series.iter().map(|&(_, v)| v).max().unwrap_or(1);
-    // Pad the value range so a flat series still draws mid-chart.
     let pad = ((v_max - v_min) / 10).max(v_max / 100).max(1);
     let lo = v_min.saturating_sub(pad) as f64;
     let hi = (v_max + pad) as f64;
-
-    // Both fractions clamped: a point outside the series' own range
-    // (e.g. a block timestamp ahead of the local clock) must pin to
-    // the chart edge, not paint past it.
     let to_pos = |&(t, v): &(u64, u64)| {
         let fx = ((t.saturating_sub(t0)) as f32 / t_span).clamp(0.0, 1.0);
         let fy = (((v as f64 - lo) / (hi - lo)) as f32).clamp(0.0, 1.0);
         egui::pos2(
-            inner.left() + fx * inner.width(),
-            inner.bottom() - fy * inner.height(),
+            plot.left() + fx * plot.width(),
+            plot.bottom() - fy * plot.height(),
         )
     };
     let points: Vec<egui::Pos2> = series.iter().map(to_pos).collect();
+    let last_point = *points.last().expect("series.len() >= 2 checked above");
 
-    // Area fill under the line: one flat-tint quad per segment.
+    // ── Net trend over the window picks the card's colour and sign. ──
+    let first_v = series[0].1;
+    let curr_v = series[series.len() - 1].1;
+    let (dir, sign, up) = match curr_v.cmp(&first_v) {
+        std::cmp::Ordering::Greater => (colors.accent2, "+", true),
+        std::cmp::Ordering::Less => (colors.danger, "\u{2212}", false),
+        std::cmp::Ordering::Equal => (colors.accent, "", true),
+    };
+    let delta = curr_v.abs_diff(first_v);
+    let tint = |alpha: u8| egui::Color32::from_rgba_unmultiplied(dir.r(), dir.g(), dir.b(), alpha);
+
+    // ── Area fill: a vertical gradient in the trend colour, brighter at
+    // the trace and fading to nothing at the baseline. ──
+    let fill_top = tint(44);
+    let fill_bot = egui::Color32::TRANSPARENT;
     let mut mesh = egui::Mesh::default();
     for pair in points.windows(2) {
         let i = mesh.vertices.len() as u32;
-        mesh.colored_vertex(pair[0], colors.accent_tint);
-        mesh.colored_vertex(pair[1], colors.accent_tint);
-        mesh.colored_vertex(egui::pos2(pair[1].x, inner.bottom()), colors.accent_tint);
-        mesh.colored_vertex(egui::pos2(pair[0].x, inner.bottom()), colors.accent_tint);
+        mesh.colored_vertex(pair[0], fill_top);
+        mesh.colored_vertex(pair[1], fill_top);
+        mesh.colored_vertex(egui::pos2(pair[1].x, plot.bottom()), fill_bot);
+        mesh.colored_vertex(egui::pos2(pair[0].x, plot.bottom()), fill_bot);
         mesh.add_triangle(i, i + 1, i + 2);
         mesh.add_triangle(i, i + 2, i + 3);
     }
     painter.add(egui::Shape::mesh(mesh));
+    // Baseline hairline grounds the fill.
+    painter.hline(
+        plot.x_range(),
+        plot.bottom(),
+        egui::Stroke::new(1.0, colors.border),
+    );
+
+    // ── Trace: a soft bloom beneath a crisp stroke. ──
     painter.add(egui::Shape::line(
-        points,
-        egui::Stroke::new(1.4, colors.accent),
+        points.clone(),
+        egui::Stroke::new(4.0, tint(22)),
     ));
-    if let Some(dot_series) = dots {
-        for p in dot_series.iter().map(to_pos) {
-            painter.circle_filled(p, 2.3, colors.accent);
-        }
-    }
+    painter.add(egui::Shape::line(points, egui::Stroke::new(2.0, dir)));
 
-    // Range captions: top = max, bottom = min, in whole CKB.
-    painter.text(
-        egui::pos2(inner.left(), rect.top() + 2.0),
-        egui::Align2::LEFT_TOP,
-        group_thousands(v_max / crate::types::CKB_DECIMAL_PLACES),
-        label_font(7.5),
-        colors.text_muted,
-    );
-    painter.text(
-        egui::pos2(inner.left(), rect.bottom() - 2.0),
-        egui::Align2::LEFT_BOTTOM,
-        group_thousands(v_min / crate::types::CKB_DECIMAL_PLACES),
-        label_font(7.5),
-        colors.text_muted,
-    );
+    // ── Endpoint: a clean dot with a gently breathing halo at "now". ──
+    let breath = 0.6 + 0.4 * (t * 1.4).sin();
+    painter.circle_filled(last_point, 6.5, tint((70.0 * breath / 3.0) as u8));
+    painter.circle_filled(last_point, 3.0, dir);
+    ui.ctx().request_repaint_after(Duration::from_millis(50));
 
-    // Time axis row: series start date left, NOW right.
+    // ── Callout: a painted ▲/▼ (font-independent), the signed CKB delta
+    // and percent in the trend colour, then "SINCE <date>" — one
+    // self-contained sentence telling the whole change story. ──
     let start_label = chrono::DateTime::from_timestamp(t0 as i64, 0)
         .map(|d| d.format("%b %d").to_string().to_uppercase())
         .unwrap_or_default();
-    let (axis, _) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 12.0), egui::Sense::hover());
-    let painter = ui.painter();
-    painter.text(
-        egui::pos2(axis.left(), axis.center().y),
+    let ccy = rect.top() + callout_h / 2.0;
+    let mut x = rect.left() + 1.0;
+    if curr_v != first_v {
+        let tri = if up {
+            vec![
+                egui::pos2(x + 4.0, ccy - 4.0),
+                egui::pos2(x, ccy + 3.0),
+                egui::pos2(x + 8.0, ccy + 3.0),
+            ]
+        } else {
+            vec![
+                egui::pos2(x + 4.0, ccy + 4.0),
+                egui::pos2(x, ccy - 3.0),
+                egui::pos2(x + 8.0, ccy - 3.0),
+            ]
+        };
+        painter.add(egui::Shape::convex_polygon(tri, dir, egui::Stroke::NONE));
+        x += 13.0;
+    }
+    let (d_int, d_frac) = ckb_split(delta);
+    let r = painter.text(
+        egui::pos2(x, ccy),
         egui::Align2::LEFT_CENTER,
-        start_label,
-        label_font(7.5),
-        colors.text_muted,
+        format!("{}{}.{} CKB", sign, d_int, &d_frac[..1]),
+        label_font(10.5),
+        dir,
     );
-    painter.text(
-        egui::pos2(axis.right(), axis.center().y),
-        egui::Align2::RIGHT_CENTER,
-        "NOW",
-        label_font(7.5),
-        colors.text_muted,
-    );
+    x = r.right() + 10.0;
+    // Percent, when the baseline is non-zero and the figure stays sane.
+    if first_v > 0 {
+        let pct = delta as f64 / first_v as f64 * 100.0;
+        if pct < 1000.0 {
+            let r = painter.text(
+                egui::pos2(x, ccy),
+                egui::Align2::LEFT_CENTER,
+                format!("{}{:.1}%", sign, pct),
+                label_font(10.5),
+                dir.gamma_multiply(0.85),
+            );
+            x = r.right() + 10.0;
+        }
+    }
+    // "SINCE <date>" only when it fits — at the minimum chart width the
+    // delta and percent take priority over the date.
+    let since = format!("SINCE {}", start_label);
+    let since_w = painter
+        .layout_no_wrap(since.clone(), label_font(8.5), colors.text_muted)
+        .size()
+        .x;
+    if x + since_w <= rect.right() {
+        painter.text(
+            egui::pos2(x, ccy),
+            egui::Align2::LEFT_CENTER,
+            since,
+            label_font(8.5),
+            colors.text_muted,
+        );
+    }
 }
