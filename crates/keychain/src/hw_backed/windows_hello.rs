@@ -330,6 +330,9 @@ pub fn retrieve_key(wallet_id: u32) -> Result<SecureVec, String> {
     }
     plaintext.truncate(actual_len as usize);
 
+    // Move into a zeroizing buffer before validating, so the
+    // length-mismatch path can't drop the decrypted key in the clear.
+    let plaintext = SecureVec::from_vec(plaintext);
     if plaintext.len() != KEY_LEN {
         return Err(format!(
             "Decrypted {}-byte key, expected {KEY_LEN}.",
@@ -337,7 +340,7 @@ pub fn retrieve_key(wallet_id: u32) -> Result<SecureVec, String> {
         ));
     }
 
-    Ok(SecureVec::from_vec(plaintext))
+    Ok(plaintext)
 }
 
 pub fn delete_key(wallet_id: u32) -> Result<(), String> {

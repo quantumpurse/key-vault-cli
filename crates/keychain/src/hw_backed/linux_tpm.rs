@@ -204,7 +204,9 @@ fn load_and_unseal(
     context.flush_context(loaded.into()).ok();
     let recovered = unseal_result?;
 
-    let bytes = recovered.value().to_vec();
+    // Wrap the unsealed key before validating, so the length-mismatch
+    // path can't drop it in the clear.
+    let bytes = SecureVec::from_vec(recovered.value().to_vec());
     if bytes.len() != KEY_LEN {
         return Err(format!(
             "Unsealed {}-byte key, expected {KEY_LEN}.",
@@ -212,7 +214,7 @@ fn load_and_unseal(
         ));
     }
 
-    Ok(SecureVec::from_vec(bytes))
+    Ok(bytes)
 }
 
 pub fn delete_key(wallet_id: u32) -> Result<(), String> {

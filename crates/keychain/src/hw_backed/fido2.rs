@@ -15,6 +15,7 @@ use ctap_hid_fido2::fidokey::GetAssertionArgsBuilder;
 use ctap_hid_fido2::fidokey::MakeCredentialArgsBuilder;
 use ctap_hid_fido2::{get_fidokey_devices, FidoKeyHidFactory, HidInfo, LibCfg};
 use qpv2_core::{utilities, SecureVec};
+use zeroize::Zeroize;
 
 const RP_ID: &str = "quantumpurse.org";
 
@@ -86,7 +87,7 @@ pub fn authenticate(credential_id: &[u8], pin: &str) -> Result<SecureVec, String
         .next()
         .ok_or_else(|| "No assertion returned from authenticator.".to_string())?;
 
-    let hmac_output = assertion
+    let mut hmac_output = assertion
         .extensions
         .into_iter()
         .find_map(|ext| match ext {
@@ -95,7 +96,12 @@ pub fn authenticate(credential_id: &[u8], pin: &str) -> Result<SecureVec, String
         })
         .ok_or_else(|| "Authenticator did not return hmac-secret output.".to_string())?;
 
-    Ok(SecureVec::from_vec(hmac_output.to_vec()))
+    // `hmac_output` is a fixed `[u8; 32]` (Copy) living on the stack, so
+    // `to_vec` copies it into the zeroizing `SecureVec`. Wipe the stack
+    // copy afterwards so the secret does not linger past return.
+    let secure = SecureVec::from_vec(hmac_output.to_vec());
+    hmac_output.zeroize();
+    Ok(secure)
 }
 
 fn rand_challenge() -> Result<[u8; 32], String> {

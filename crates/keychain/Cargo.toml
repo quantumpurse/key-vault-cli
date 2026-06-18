@@ -8,11 +8,12 @@ license = "MIT"
 
 [features]
 default = []
-fido2 = ["ctap-hid-fido2"]
+fido2 = ["ctap-hid-fido2", "zeroize"]
 
 [dependencies]
 qpv2-core = { path = "../qpv2-core" }
 ctap-hid-fido2 = { version = "3.5", optional = true }
+zeroize = { version = "1.8.2", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3", features = ["OSX_10_13", "OSX_10_15"] }
