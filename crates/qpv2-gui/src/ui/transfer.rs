@@ -96,7 +96,7 @@ impl App {
     /// separated by hairlines, then the single solid-accent execute button.
     fn draw_order_ticket(&mut self, ui: &mut egui::Ui, is_busy: bool) {
         panel_frame(&self.colors).show(ui, |ui| {
-            section_header(ui, &self.colors, "01", "Order Entry");
+            section_header(ui, &self.colors, "01", "Send CKB");
             ui.add_space(10.0);
 
             // ── FROM: account selector ──
@@ -268,42 +268,54 @@ impl App {
                 });
             }
 
-            field_rule(ui, &self.colors);
+            ui.add_space(14.0);
 
-            // ── FEE RATE ──
-            ui.horizontal(|ui| {
-                field_label(ui, &self.colors, "FEE RATE");
+            // ── Fee Rate (collapsible) ──
+            egui::CollapsingHeader::new(
+                egui::RichText::new("ADVANCED")
+                    .font(label_font(9.5))
+                    .color(self.colors.text_muted),
+            )
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new("FEE RATE (SHANNONS/KB)")
+                        .font(label_font(9.0))
+                        .color(self.colors.text_muted),
+                );
+                ui.add_space(4.0);
                 let fee_edit = egui::TextEdit::singleline(&mut self.transfer_fee_rate)
                     .hint_text("1000")
                     .desired_width(120.0)
                     .font(egui::FontId::monospace(12.0))
                     .interactive(!is_busy);
                 ui.add(fee_edit);
-                ui.add_space(8.0);
-                ui.label(
-                    egui::RichText::new("SHANNONS/KB")
-                        .font(label_font(9.0))
-                        .color(self.colors.text_muted),
-                );
             });
 
-            field_rule(ui, &self.colors);
+            ui.add_space(12.0);
 
             // ── Irreversibility caution ──
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("[WARN]")
-                        .font(label_font(10.0))
+            egui::Frame::new()
+                .fill(self.colors.warn_tint)
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgba_unmultiplied(
+                        self.colors.warn.r(),
+                        self.colors.warn.g(),
+                        self.colors.warn.b(),
+                        90,
+                    ),
+                ))
+                .inner_margin(egui::Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            "Transfers are final. Double-check the recipient address before sending.",
+                        )
+                        .size(11.0)
                         .color(self.colors.warn),
-                );
-                ui.label(
-                    egui::RichText::new(
-                        "Transfers are final. Double-check the recipient address before sending.",
-                    )
-                    .size(11.0)
-                    .color(self.colors.text_muted),
-                );
-            });
+                    );
+                });
 
             ui.add_space(12.0);
 

@@ -439,7 +439,7 @@ impl App {
                             .show(ui, |ui| {
                                 ui.label(
                                     egui::RichText::new(
-                                        "Deposited CKB is locked until you request withdrawal and wait for an epoch boundary (~4 hours/epoch).",
+                                        "Withdrawal can be requested any time, but funds unlock only at the end of each 180-epoch deposit cycle (~30 days).",
                                     )
                                     .size(11.0)
                                     .color(self.colors.warn),
@@ -595,11 +595,11 @@ impl App {
 
         let full_w = ui.available_width();
         let gap = 10.0;
-        let w_acct = 64.0;
+        let w_acct = 50.0;
         let w_amount = 150.0;
         let w_earned = 140.0;
         let w_age = 96.0;
-        let w_state = 96.0;
+        let w_state = 70.0;
         let w_action = 104.0;
         // The outpoint carries a full 32-byte tx hash, so it takes the
         // flex slot; the numeric columns are fixed since their values
