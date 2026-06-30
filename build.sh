@@ -70,12 +70,12 @@ case "$TARGET" in
 		;;
 	gui)
 		if [ "$RELEASE" = true ]; then
-			./crates/qpv2-gui/scripts/bundle.sh --release --profile ~/Desktop/Quantum_Purse_Wallet_Developer_ID.provisionprofile
+			./crates/qpv2-gui/scripts/bundle.sh --release
 			if [ "$SIGN" = true ]; then
 				./crates/qpv2-gui/scripts/sign.sh --release
 			fi
 		else
-			./crates/qpv2-gui/scripts/bundle.sh --profile ~/Desktop/Quantum_Purse_Wallet_Developer_ID.provisionprofile
+			./crates/qpv2-gui/scripts/bundle.sh
 			if [ "$SIGN" = true ]; then
 				./crates/qpv2-gui/scripts/sign.sh
 			fi

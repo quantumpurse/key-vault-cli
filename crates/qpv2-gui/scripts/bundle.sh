@@ -5,7 +5,7 @@
 # Info.plist. Run sign.sh afterwards for code signing.
 #
 # Usage:
-#   ./crates/qpv2-gui/scripts/bundle.sh [--release] [--profile <path>]
+#   ./crates/qpv2-gui/scripts/bundle.sh [--release]
 
 set -euo pipefail
 
@@ -15,12 +15,9 @@ PROJECT_ROOT="$(cd "$GUI_DIR/../.." && pwd)"
 
 source "$SCRIPT_DIR/config.sh"
 
-ENTITLEMENTS="$GUI_DIR/entitlements.plist"
-
 # Parse arguments.
 BUILD_TYPE="debug"
 CARGO_FLAGS=""
-PROFILE_PATH=""
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--release)
@@ -28,13 +25,9 @@ while [[ $# -gt 0 ]]; do
 			CARGO_FLAGS="--release"
 			shift
 			;;
-		--profile)
-			PROFILE_PATH="$2"
-			shift 2
-			;;
 		*)
 			echo "Unknown argument: $1"
-			echo "Usage: $0 [--release] [--profile <path>]"
+			echo "Usage: $0 [--release]"
 			exit 1
 			;;
 	esac
@@ -156,20 +149,6 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 </dict>
 </plist>
 PLIST
-
-# Embed provisioning profile.
-if [ -n "$PROFILE_PATH" ]; then
-	if [ ! -f "$PROFILE_PATH" ]; then
-		echo "ERROR: Provisioning profile not found: $PROFILE_PATH"
-		exit 1
-	fi
-	echo "==> Embedding provisioning profile: $PROFILE_PATH"
-	cp "$PROFILE_PATH" "$APP_BUNDLE/Contents/embedded.provisionprofile"
-else
-	echo "==> WARNING: No provisioning profile specified."
-	echo "    Passkey operations will fail without a provisioning profile."
-	echo "    Use --profile <path> to provide one."
-fi
 
 echo ""
 echo "==> Bundle created: $APP_BUNDLE"
