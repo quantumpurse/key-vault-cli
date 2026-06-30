@@ -112,7 +112,7 @@ Run:
 
 ##### Windows
 
-Build toolchain: Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). Then install MSYS2 and in the MSYS2 shell: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`. Add the MSYS2 mingw64 bin directory (e.g. `C:\msys64\mingw64\bin`) to the system PATH so that `gcc` resolves to the 64-bit toolchain.
+Build toolchain: Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). Then install MSYS2 and open **"MSYS2 MINGW64"** from the Start menu (not UCRT64 or plain MSYS2), then run: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`. Add the MSYS2 mingw64 bin directory (e.g. `C:\msys64\mingw64\bin`) to the system PATH so that `gcc` resolves to the 64-bit toolchain.
 
 ```powershell
 # CLI
@@ -120,6 +120,8 @@ cargo build -p qpv2-cli --release
 
 # GUI
 .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
+# If PowerShell blocks the script, run it with:
+# powershell -ExecutionPolicy Bypass -File .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
 # → target\<profile>\qpv2-gui-windows-x86_64\  (+ .zip)
 ```
 
