@@ -62,16 +62,21 @@ if (-not $bash) {
 if (-not $bash -or -not (Test-Path $bash)) {
     throw "MSYS2 bash not found - pinentry-w32 cannot be built. Install MSYS2 (https://www.msys2.org), then in its shell: pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel. If bash.exe is not at C:\msys64\usr\bin\bash.exe, set `$env:MSYS2_BASH."
 }
-Write-Host "==> Building pinentry-w32 via $bash (MINGW64)..."
-# Mirror the CI's `msystem: MINGW64` + `shell: msys2 {0}`: the login shell
-# reads MSYSTEM to put the MinGW64 toolchain on PATH, so build-pinentry.sh
-# sees `uname -s` = MINGW64_NT-... and writes to
-# vendor/pinentry-build/MINGW64_NT-...-<arch>/ (matched by the glob below).
-# Plain bash.exe defaults to MSYSTEM=MSYS, which builds the wrong flavor.
-$env:MSYSTEM = 'MINGW64'
-$unixRoot = (& $bash -lc "cygpath -u '$ProjectRoot'").Trim()
-& $bash -lc "cd '$unixRoot' && ./vendor/build-pinentry.sh"
-if ($LASTEXITCODE -ne 0) { throw "build-pinentry.sh failed under MSYS2 (MINGW64)" }
+$existingPinentry = Get-ChildItem (Join-Path $ProjectRoot 'vendor\pinentry-build\MINGW*\pinentry-w32.exe') -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($existingPinentry) {
+    Write-Host "==> pinentry-w32 already built: $($existingPinentry.FullName)"
+} else {
+    Write-Host "==> Building pinentry-w32 via $bash (MINGW64)..."
+    # Mirror the CI's `msystem: MINGW64` + `shell: msys2 {0}`: the login shell
+    # reads MSYSTEM to put the MinGW64 toolchain on PATH, so build-pinentry.sh
+    # sees `uname -s` = MINGW64_NT-... and writes to
+    # vendor/pinentry-build/MINGW64_NT-...-<arch>/ (matched by the glob below).
+    # Plain bash.exe defaults to MSYSTEM=MSYS, which builds the wrong flavor.
+    $env:MSYSTEM = 'MINGW64'
+    $unixRoot = (& $bash -lc "cygpath -u '$ProjectRoot'").Trim()
+    & $bash -lc "cd '$unixRoot' && ./vendor/build-pinentry.sh"
+    if ($LASTEXITCODE -ne 0) { throw "build-pinentry.sh failed under MSYS2 (MINGW64)" }
+}
 
 # ── Build binaries ────────────────────────────────────────────────
 Write-Host "==> Building $BinaryName ($BuildType)..."

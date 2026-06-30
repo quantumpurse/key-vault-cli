@@ -42,14 +42,16 @@ PKG_NAME="qpv2-gui-linux-$(uname -m)"
 PKG_DIR="$TARGET_DIR/$PKG_NAME"
 
 # ── Build pinentry-gtk-2 (the default password dialog; always bundled) ──
-# Rebuilt unconditionally, matching the CI — no caching, so a changed
-# pinentry source is never shipped stale.
 PINENTRY_BIN="$PROJECT_ROOT/vendor/pinentry-build/$(uname -s)-$(uname -m)/pinentry-gtk-2"
-echo "==> Building pinentry-gtk-2..."
-"$PROJECT_ROOT/vendor/build-pinentry.sh"
-if [ ! -f "$PINENTRY_BIN" ]; then
-	echo "ERROR: pinentry-gtk-2 not found at $PINENTRY_BIN"
-	exit 1
+if [ -f "$PINENTRY_BIN" ]; then
+	echo "==> pinentry-gtk-2 already built: $PINENTRY_BIN"
+else
+	echo "==> Building pinentry-gtk-2..."
+	"$PROJECT_ROOT/vendor/build-pinentry.sh"
+	if [ ! -f "$PINENTRY_BIN" ]; then
+		echo "ERROR: pinentry-gtk-2 not found at $PINENTRY_BIN"
+		exit 1
+	fi
 fi
 
 # ── Build binaries ────────────────────────────────────────────────

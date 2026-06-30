@@ -121,7 +121,7 @@ cargo build -p qpv2-cli --release
 # GUI
 .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
 # If PowerShell blocks the script, run it with:
-# powershell -ExecutionPolicy Bypass -File .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
+powershell -ExecutionPolicy Bypass -File .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
 # → target\<profile>\qpv2-gui-windows-x86_64\  (+ .zip)
 ```
 
