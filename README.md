@@ -123,11 +123,6 @@ sessions.
 | **Light Client** | Local `ckb-light-client` child process; header-only sync, per-script cell index. | Privacy-preserving; modest disk + bandwidth. |
 | **Full Node** | Local `ckb` child process; full chain verification, full indexer. | Maximum sovereignty; ~100 GB disk and multi-day sync. |
 
-Both local backends are bundled inside the signed `qpv2.app`
-(`Contents/MacOS/{ckb-light-client,ckb}`) and spawned/stopped by the GUI
-automatically. Per-network data dirs live under `~/Library/Application
-Support/quantum-purse/node/`.
-
 ### Password Input
 
 Password entry in QPV2 happens **outside the wallet's own process** —

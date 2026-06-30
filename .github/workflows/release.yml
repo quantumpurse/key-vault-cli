@@ -135,7 +135,7 @@ jobs:
   # ── GUI bundles ───────────────────────────────────────────────────
 
   build-gui-macos:
-    name: Build macOS GUI (.app unsigned)
+    name: Build macOS GUI (.app signed + notarized)
     needs: create-release
     runs-on: macos-latest
     steps:
@@ -150,8 +150,47 @@ jobs:
     - name: Install build dependencies
       run: brew install automake gettext
 
+    - name: Import Developer ID certificate
+      env:
+        APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      run: |
+        CERT_PATH="$RUNNER_TEMP/certificate.p12"
+        KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+        echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+        security create-keychain -p "" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "" "$KEYCHAIN_PATH"
+        security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
+          -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
     - name: Bundle app
       run: crates/qpv2-gui/scripts/bundle.sh --release
+
+    - name: Sign app
+      run: crates/qpv2-gui/scripts/sign.sh --release
+
+    - name: Notarize app
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        cd target/release
+        ditto -c -k --keepParent qpv2.app qpv2-notarize.zip
+        xcrun notarytool submit qpv2-notarize.zip \
+          --apple-id "$APPLE_ID" \
+          --password "$APPLE_ID_PASSWORD" \
+          --team-id "$APPLE_TEAM_ID" \
+          --wait
+        xcrun stapler staple qpv2.app
+        rm qpv2-notarize.zip
+
+    - name: Clean up keychain
+      if: always()
+      run: security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
 
     - name: Package
       run: |
