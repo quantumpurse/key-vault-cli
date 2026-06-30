@@ -62,39 +62,63 @@ master_seed
 
 Dependencies: Rust & Cargo (1.70+)
 
+All platforms require git submodules before building:
 ```shell
+git clone https://github.com/quantumpurse/quantum-purse-v2.git
+cd quantum-purse-v2
 git submodule update --init --recursive
 ```
 
-##### CLI:
-
-```shell
-cargo build -p qpv2-cli --release
-```
-
-##### GUI:
-
-- ###### macOS
+##### macOS
 
 Build toolchain: `brew install automake gettext && xcode-select --install`
 
 ```shell
+# CLI
+cargo build -p qpv2-cli --release
+
+# GUI (builds, bundles, and optionally signs the .app)
 ./build.sh <cli|gui> [--release] [--sign] [--clean]   # gui → target/<profile>/qpv2.app
 ./launch.sh <cli|gui> [--release]
 ```
 
-- ###### Linux:
+##### Linux
 
+Install system dependencies first — the build will fail without them:
 ```shell
 sudo apt-get install -y gettext libgtk2.0-dev libdbus-1-dev libtss2-dev libudev-dev
+```
+
+Build:
+```shell
+# CLI
+cargo build -p qpv2-cli --release
+# → target/release/qpv2-cli
+
+# GUI (builds the GUI, pinentry-gtk-2, ckb-light-client, and ckb full node, then packages everything into a tarball)
 ./crates/qpv2-gui/scripts/bundle-linux.sh [--release]
 # → target/<profile>/qpv2-gui-linux-<arch>/  (+ .tar.gz)
 ```
 
-- ###### Windows:
-build toolchain: MSYS2 -> In the MSYS2 shell: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`
+Run:
+```shell
+# CLI
+./target/release/qpv2-cli --help
+
+# GUI (launch.sh is macOS-only; on Linux run the binary directly)
+./target/debug/qpv2-gui-linux-x86_64/qpv2-gui          # debug
+./target/release/qpv2-gui-linux-x86_64/qpv2-gui         # release
+```
+
+##### Windows
+
+Build toolchain: Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). Then install MSYS2 and in the MSYS2 shell: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`. Add the MSYS2 mingw64 bin directory (e.g. `C:\msys64\mingw64\bin`) to the system PATH so that `gcc` resolves to the 64-bit toolchain.
 
 ```powershell
+# CLI
+cargo build -p qpv2-cli --release
+
+# GUI
 .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
 # → target\<profile>\qpv2-gui-windows-x86_64\  (+ .zip)
 ```
@@ -116,7 +140,7 @@ qpv2-cli --help
 
 Commands that require authentication (export, new account, sign, etc.) auto-detect the wallet's auth method. Password wallets prompt for a password; keychain wallets use the platform's native credential store (Touch ID on macOS, Windows Hello on Windows, TPM on Linux).
 
-### Use GUI utilities scripts (Macos only)
+### Launch Scripts (macOS only)
 ```shell
 # Launch the dev GUI
 ./launch.sh gui
@@ -124,6 +148,8 @@ Commands that require authentication (export, new account, sign, etc.) auto-dete
 # Launch the prod GUI
 ./launch.sh gui --release
 ```
+
+On Linux and Windows, run the binary directly from the bundle output directory (see Build & Run above).
 
 ### Node Backends
 
