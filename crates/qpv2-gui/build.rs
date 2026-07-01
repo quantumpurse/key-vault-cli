@@ -173,20 +173,32 @@ fn stage_pinentry_windows() {
         None => return,
     };
 
-    let vendor_bin = root
-        .join("vendor")
-        .join("pinentry-build")
-        .join(format!("MINGW64_NT-{}", uname_arch()))
-        .join("pinentry-w32.exe");
+    let pinentry_dir = root.join("vendor").join("pinentry-build");
+    let vendor_bin = std::fs::read_dir(&pinentry_dir)
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| {
+                    e.file_name()
+                        .to_str()
+                        .is_some_and(|n| n.starts_with("MINGW64_NT"))
+                })
+                .map(|e| e.path().join("pinentry-w32.exe"))
+        })
+        .filter(|p| p.exists());
 
-    if !vendor_bin.exists() {
-        println!(
-            "cargo:warning=pinentry-w32.exe not found at {}. \
-			 Run `vendor/build-pinentry.sh` first.",
-            vendor_bin.display()
-        );
-        return;
-    }
+    let vendor_bin = match vendor_bin {
+        Some(p) => p,
+        None => {
+            println!(
+                "cargo:warning=pinentry-w32.exe not found under {}. \
+				 Run `vendor/build-pinentry.sh` first.",
+                pinentry_dir.display()
+            );
+            return;
+        }
+    };
 
     let dst = profile.join("pinentry-w32.exe");
     let _ = std::fs::remove_file(&dst);
