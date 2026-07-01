@@ -60,7 +60,7 @@ master_seed
 
 ### Build & Run
 
-Dependencies: Rust & Cargo (1.70+)
+Dependencies: Rust & Cargo
 
 All platforms require git submodules before building:
 ```shell
@@ -112,7 +112,10 @@ Run:
 
 ##### Windows
 
-Build toolchain: Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). Then install MSYS2 and open **"MSYS2 MINGW64"** from the Start menu (not UCRT64 or plain MSYS2), then run: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`. Add the MSYS2 mingw64 bin directory (e.g. `C:\msys64\mingw64\bin`) to the system PATH so that `gcc` resolves to the 64-bit toolchain.
+Build toolchain:
+- Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). 
+- Then install [MSYS2](https://www.msys2.org) and open **"MSYS2 MINGW64"** from the Start menu, then run: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`. 
+- Add `C:\msys64\mingw64\bin` to the system PATH so that `gcc` resolves to the 64-bit toolchain. In an admin PowerShell: `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "Machine") + ";C:\msys64\mingw64\bin", "Machine")` — then restart PowerShell.
 
 ```powershell
 # CLI

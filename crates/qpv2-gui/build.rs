@@ -54,7 +54,7 @@ fn uname_arch() -> &'static str {
         other => other,
     }
 }
-
+/// macos .app is a directory, not a single binary like in case of linux and windows.
 #[cfg(target_os = "macos")]
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
