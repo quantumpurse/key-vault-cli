@@ -249,7 +249,11 @@ fn send_terminate_signal(child: &Child) {
 /// 3. Dev fallback — walk up from the current exe to find
 ///    `vendor/ckb-light-client/target/{release,debug}/ckb-light-client`.
 fn locate_light_client_binary(config: &NodeConfig) -> Result<PathBuf, NodeManagerError> {
-    let bin_name = if cfg!(windows) { "ckb-light-client.exe" } else { "ckb-light-client" };
+    let bin_name = if cfg!(windows) {
+        "ckb-light-client.exe"
+    } else {
+        "ckb-light-client"
+    };
 
     if let Some(path) = &config.binary_path {
         if path.exists() {

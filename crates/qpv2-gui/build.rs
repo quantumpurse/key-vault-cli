@@ -47,6 +47,7 @@ fn workspace_root() -> Option<PathBuf> {
 
 /// Maps Rust's `std::env::consts::ARCH` to `uname -m` output
 /// used by `vendor/build-pinentry.sh` for the build directory name.
+#[cfg(not(target_os = "windows"))]
 fn uname_arch() -> &'static str {
     match std::env::consts::ARCH {
         "aarch64" => "arm64",
