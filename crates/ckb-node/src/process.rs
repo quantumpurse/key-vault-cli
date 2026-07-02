@@ -249,6 +249,12 @@ fn send_terminate_signal(child: &Child) {
 /// 3. Dev fallback — walk up from the current exe to find
 ///    `vendor/ckb-light-client/target/{release,debug}/ckb-light-client`.
 fn locate_light_client_binary(config: &NodeConfig) -> Result<PathBuf, NodeManagerError> {
+    let bin_name = if cfg!(windows) {
+        "ckb-light-client.exe"
+    } else {
+        "ckb-light-client"
+    };
+
     if let Some(path) = &config.binary_path {
         if path.exists() {
             return Ok(path.clone());
@@ -261,7 +267,7 @@ fn locate_light_client_binary(config: &NodeConfig) -> Result<PathBuf, NodeManage
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let candidate = parent.join("ckb-light-client");
+            let candidate = parent.join(bin_name);
             if candidate.exists() {
                 return Ok(candidate);
             }
@@ -276,7 +282,7 @@ fn locate_light_client_binary(config: &NodeConfig) -> Result<PathBuf, NodeManage
                     .join("ckb-light-client")
                     .join("target")
                     .join(profile)
-                    .join("ckb-light-client");
+                    .join(bin_name);
                 if candidate.exists() {
                     return Ok(candidate);
                 }
@@ -366,6 +372,8 @@ fn rewrite_light_client_template_paths(template: &str, data_dir: &Path) -> Strin
 /// 3. Dev fallback — walk up from the current exe to find
 ///    `vendor/ckb/target/{release,debug}/ckb`.
 fn locate_full_node_binary(config: &NodeConfig) -> Result<PathBuf, NodeManagerError> {
+    let bin_name = if cfg!(windows) { "ckb.exe" } else { "ckb" };
+
     if let Some(path) = &config.binary_path {
         if path.exists() {
             return Ok(path.clone());
@@ -378,7 +386,7 @@ fn locate_full_node_binary(config: &NodeConfig) -> Result<PathBuf, NodeManagerEr
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let candidate = parent.join("ckb");
+            let candidate = parent.join(bin_name);
             if candidate.exists() {
                 return Ok(candidate);
             }
@@ -393,7 +401,7 @@ fn locate_full_node_binary(config: &NodeConfig) -> Result<PathBuf, NodeManagerEr
                     .join("ckb")
                     .join("target")
                     .join(profile)
-                    .join("ckb");
+                    .join(bin_name);
                 if candidate.exists() {
                     return Ok(candidate);
                 }

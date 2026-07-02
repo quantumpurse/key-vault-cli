@@ -58,38 +58,82 @@ master_seed
 (sphincs+ public_key, sphincs+ private_key)
 ```
 
-### Dependencies
-
-- Rust & Cargo (1.70+)
-
-### Developer Build Toolchain
-
-Local GUI development and build scripts (`build.sh`, `launch.sh`,
-`crates/qpv2-gui/scripts/`) are designed for macOS only. Linux and
-Windows GUI builds are handled by the CI/CD workflow.
-
-The GUI's password dialog (`pinentry`) is built from source via
-`vendor/build-pinentry.sh`. Developers on macOS need:
-
-| Tool | Install | Purpose |
-|------|---------|---------|
-| `automake` | `brew install automake` | Generates Makefiles for C deps |
-| `gettext` | `brew install gettext` | Provides m4 macros for autotools |
-| Xcode CLI tools | `xcode-select --install` | Obj-C compiler + ibtool for nib files |
-
 ### Build & Run
+
+Dependencies: Rust & Cargo
+
+All platforms require git submodules before building:
 ```shell
-# Build
-./build.sh <cli|gui> [--release] [--sign] [--clean]
-
-# Run
-./launch.sh <cli|gui> [--release]
-
-# Run tests
-cargo test --workspace
+git clone https://github.com/quantumpurse/quantum-purse-v2.git
+cd quantum-purse-v2
+git submodule update --init --recursive
 ```
 
-The CLI build includes codesigning with entitlements, which is required for keychain (`--keychain`) support on macOS. Password-only wallets work without signing.
+##### macOS
+
+Build toolchain: `brew install automake gettext && xcode-select --install`
+
+```shell
+# CLI
+cargo build -p qpv2-cli --release
+
+# GUI (builds, bundles, and optionally signs the .app)
+./build.sh <cli|gui> [--release] [--sign] [--clean]   # gui → target/<profile>/qpv2.app
+./launch.sh <cli|gui> [--release]
+```
+
+##### Linux
+
+Install system dependencies first — the build will fail without them:
+```shell
+sudo apt-get install -y gettext libgtk2.0-dev libdbus-1-dev libtss2-dev libudev-dev
+```
+
+Build:
+```shell
+# CLI
+cargo build -p qpv2-cli --release
+# → target/release/qpv2-cli
+
+# GUI (builds the GUI, pinentry-gtk-2, ckb-light-client, and ckb full node, then packages everything into a tarball)
+./crates/qpv2-gui/scripts/bundle-linux.sh [--release]
+# → target/<profile>/qpv2-gui-linux-<arch>/  (+ .tar.gz)
+```
+
+Run:
+```shell
+# CLI
+./target/release/qpv2-cli --help
+
+# GUI (launch.sh is macOS-only; on Linux run the binary directly)
+./target/debug/qpv2-gui-linux-x86_64/qpv2-gui          # debug
+./target/release/qpv2-gui-linux-x86_64/qpv2-gui         # release
+```
+
+##### Windows
+
+Build toolchain:
+- Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). 
+- Install [LLVM](https://releases.llvm.org/) (`winget install LLVM.LLVM`). Required by RocksDB's bindgen to find `libclang.dll`.
+- Install [MSYS2](https://www.msys2.org) and open **"MSYS2 MINGW64"** from the Start menu (not UCRT64 or plain MSYS2), then run: `pacman -S mingw-w64-x86_64-toolchain automake autoconf libtool make gettext-devel`. 
+- Add `C:\msys64\mingw64\bin` to the system PATH so that `gcc` resolves to the 64-bit toolchain. In an admin PowerShell: `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "Machine") + ";C:\msys64\mingw64\bin", "Machine")` — then restart PowerShell.
+
+```powershell
+# CLI
+cargo build -p qpv2-cli --release
+
+# GUI
+.\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
+# If PowerShell blocks the script, run it with:
+powershell -ExecutionPolicy Bypass -File .\crates\qpv2-gui\scripts\bundle-windows.ps1 [-Release]
+# → target\<profile>\qpv2-gui-windows-x86_64\  (+ .zip)
+```
+
+### Tests
+
+```shell
+cargo test --workspace
+```
 
 ### Use CLI
 
@@ -102,7 +146,7 @@ qpv2-cli --help
 
 Commands that require authentication (export, new account, sign, etc.) auto-detect the wallet's auth method. Password wallets prompt for a password; keychain wallets use the platform's native credential store (Touch ID on macOS, Windows Hello on Windows, TPM on Linux).
 
-### Use GUI
+### Launch Scripts (macOS only)
 ```shell
 # Launch the dev GUI
 ./launch.sh gui
@@ -110,6 +154,8 @@ Commands that require authentication (export, new account, sign, etc.) auto-dete
 # Launch the prod GUI
 ./launch.sh gui --release
 ```
+
+On Linux and Windows, run the binary directly from the bundle output directory (see Build & Run above).
 
 ### Node Backends
 

@@ -47,6 +47,7 @@ fn workspace_root() -> Option<PathBuf> {
 
 /// Maps Rust's `std::env::consts::ARCH` to `uname -m` output
 /// used by `vendor/build-pinentry.sh` for the build directory name.
+#[cfg(not(target_os = "windows"))]
 fn uname_arch() -> &'static str {
     match std::env::consts::ARCH {
         "aarch64" => "arm64",
@@ -54,7 +55,7 @@ fn uname_arch() -> &'static str {
         other => other,
     }
 }
-
+/// macos .app is a directory, not a single binary like in case of linux and windows.
 #[cfg(target_os = "macos")]
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
@@ -173,20 +174,32 @@ fn stage_pinentry_windows() {
         None => return,
     };
 
-    let vendor_bin = root
-        .join("vendor")
-        .join("pinentry-build")
-        .join(format!("MINGW64_NT-{}", uname_arch()))
-        .join("pinentry-w32.exe");
+    let pinentry_dir = root.join("vendor").join("pinentry-build");
+    let vendor_bin = std::fs::read_dir(&pinentry_dir)
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| {
+                    e.file_name()
+                        .to_str()
+                        .is_some_and(|n| n.starts_with("MINGW64_NT"))
+                })
+                .map(|e| e.path().join("pinentry-w32.exe"))
+        })
+        .filter(|p| p.exists());
 
-    if !vendor_bin.exists() {
-        println!(
-            "cargo:warning=pinentry-w32.exe not found at {}. \
-			 Run `vendor/build-pinentry.sh` first.",
-            vendor_bin.display()
-        );
-        return;
-    }
+    let vendor_bin = match vendor_bin {
+        Some(p) => p,
+        None => {
+            println!(
+                "cargo:warning=pinentry-w32.exe not found under {}. \
+				 Run `vendor/build-pinentry.sh` first.",
+                pinentry_dir.display()
+            );
+            return;
+        }
+    };
 
     let dst = profile.join("pinentry-w32.exe");
     let _ = std::fs::remove_file(&dst);

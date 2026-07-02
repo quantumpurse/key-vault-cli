@@ -70,12 +70,12 @@ case "$TARGET" in
 		;;
 	gui)
 		if [ "$RELEASE" = true ]; then
-			./crates/qpv2-gui/scripts/bundle.sh --release
+			./crates/qpv2-gui/scripts/bundle-macos.sh --release
 			if [ "$SIGN" = true ]; then
 				./crates/qpv2-gui/scripts/sign.sh --release
 			fi
 		else
-			./crates/qpv2-gui/scripts/bundle.sh
+			./crates/qpv2-gui/scripts/bundle-macos.sh
 			if [ "$SIGN" = true ]; then
 				./crates/qpv2-gui/scripts/sign.sh
 			fi
