@@ -93,9 +93,14 @@ impl MultisigConfig {
     }
 
     /// Convenience constructor for single-signer accounts.
+    ///
+    /// The quantum-resistant lock script specifies the single-sig
+    /// config as `<80 01 01 01 param_id>`: the sole signer is required
+    /// (`required_first_n: 1`), with threshold 1 of 1 total. See
+    /// <https://github.com/nervosnetwork/quantum-resistant-lock-script/blob/main/docs/simple.md>.
     pub fn single_sig(variant: SpxVariant, pubkey: Vec<u8>) -> Self {
         MultisigConfig {
-            required_first_n: 0,
+            required_first_n: 1,
             threshold: 1,
             signers: vec![Signer { variant, pubkey }],
         }
