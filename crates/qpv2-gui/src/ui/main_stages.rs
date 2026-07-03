@@ -517,18 +517,12 @@ impl App {
             ui.add_space(32.0);
 
             // The qp∞ mark at full size — the one place it gets room.
-            let (logo, _) = ui.allocate_exact_size(egui::vec2(56.0, 56.0), egui::Sense::hover());
+            let (logo, _) = ui.allocate_exact_size(egui::vec2(42.0, 42.0), egui::Sense::hover());
             draw_qp_logo_chip(ui.painter(), logo, self.colors.accent, self.colors.bg);
             ui.add_space(10.0);
 
             ui.label(
-                egui::RichText::new("QUANTUM PURSE")
-                    .font(display_font(28.0))
-                    .color(self.colors.accent),
-            );
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new("POST-QUANTUM VAULT // NERVOS CKB")
+                egui::RichText::new("QUANTUM PURSE // POST-QUANTUM HARDENED // NERVOS CKB")
                     .font(label_font(10.0))
                     .color(self.colors.text_muted),
             );
@@ -559,7 +553,7 @@ impl App {
                         self.draw_variant_grid(ui, panel_w - 30.0);
 
                         ui.add_space(16.0);
-                        section_header(ui, &self.colors, "02", "Initialize New Vault");
+                        section_header(ui, &self.colors, "02", "Create New Vault");
                         ui.add_space(8.0);
                         self.draw_auth_row(ui, panel_w - 30.0, false);
 
@@ -577,7 +571,13 @@ impl App {
             );
 
             ui.add_space(16.0);
-            ui.vertical_centered(|ui| self.show_status(ui));
+            // Same centered block width as the panel above, so the
+            // status line's left edge aligns with the panel's.
+            ui.allocate_ui_with_layout(
+                egui::vec2(panel_w, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| self.show_status(ui),
+            );
         });
     }
 
@@ -802,7 +802,13 @@ impl App {
             );
 
             ui.add_space(16.0);
-            ui.vertical_centered(|ui| self.show_status(ui));
+            // Same centered block width as the panel above, so the
+            // status line's left edge aligns with the panel's.
+            ui.allocate_ui_with_layout(
+                egui::vec2(panel_w, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| self.show_status(ui),
+            );
         });
     }
 }

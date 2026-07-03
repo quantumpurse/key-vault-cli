@@ -1777,7 +1777,10 @@ fn main() -> Result<(), String> {
                         println!("  [{}] {}", entry.id, entry.name);
                         println!("      Variant               : {}", wallet_info.spx_variant);
                         println!("      Authentication        : {}", auth_method_display);
-                        println!("      Single-sig convention : {}", wallet_info.single_sig_convention);
+                        println!(
+                            "      Single-sig convention : {}",
+                            wallet_info.single_sig_convention
+                        );
                         println!("      Accounts              : {}", accounts.len());
                         println!("      Path                  : {}", data_path.display());
                         println!();

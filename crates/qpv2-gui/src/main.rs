@@ -370,7 +370,7 @@ impl App {
         let startup_status = match local_node.spawn() {
             Ok(()) => {
                 if local_node.has_local_process() {
-                    Status::Info("Local node started.".to_string())
+                    Status::Info("Local blockchain node started.".to_string())
                 } else {
                     Status::Info(format!(
                         "Connected to {} ({}).",
@@ -633,8 +633,8 @@ fn main() -> eframe::Result {
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 600.0])
-            .with_min_inner_size([1100.0, 600.0])
+            .with_inner_size([1100.0, 620.0])
+            .with_min_inner_size([1100.0, 620.0])
             .with_title("Quantum Purse")
             // Wayland resolves the launcher icon by matching this to the
             // installed .desktop file; keep it equal to the bundle id and

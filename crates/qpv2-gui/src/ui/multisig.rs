@@ -5,6 +5,7 @@ use eframe::egui;
 use super::accounts::{header_cell, table_rule, truncate_middle};
 use super::utils::{
     accent_button, badge, ckb_split, ghost_button, panel_frame, row_hover, section_header,
+    SectionCounter,
 };
 use crate::types::{display_font, label_font, Status};
 use crate::App;
@@ -113,6 +114,10 @@ impl App {
                     })
                     .collect();
 
+                // One counter spans the registry and the co-signer flow
+                // below so the screen never shows duplicate codes.
+                let mut sec = SectionCounter::new();
+
                 panel_frame(&self.colors).show(ui, |ui| {
                     ui.set_width(ui.available_width());
 
@@ -126,7 +131,7 @@ impl App {
                                 section_header(
                                     ui,
                                     &self.colors,
-                                    "01",
+                                    &sec.next_code(),
                                     &format!("Multisig Registry // {}", rows.len()),
                                 );
                             },
@@ -157,7 +162,7 @@ impl App {
                 });
 
                 // Co-signer signing flow: paste / verify / sign panels.
-                self.show_sign_request_ui(ui);
+                self.show_sign_request_ui(ui, &mut sec);
 
                 ui.add_space(20.0);
             });

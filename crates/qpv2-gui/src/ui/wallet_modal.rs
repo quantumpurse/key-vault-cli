@@ -7,7 +7,9 @@ use eframe::egui;
 use qpv2_core::types::{SingleSigConvention, SpxVariant};
 
 use crate::types::{label_font, WalletModal};
-use crate::ui::utils::{accent_button, ghost_button, section_header, v1_import_checkbox};
+use crate::ui::utils::{
+    accent_button, ghost_button, section_header, v1_import_checkbox, SectionCounter,
+};
 use crate::App;
 
 const MODAL_W: f32 = 440.0;
@@ -96,8 +98,12 @@ impl App {
         );
         ui.add_space(14.0);
 
-        // ── 01 / Name ──
-        section_header(ui, &self.colors, "01", "Name");
+        // Sections are numbered in render order because Source only
+        // appears on import; fixed codes would gap on the create flow.
+        let mut sec = SectionCounter::new();
+
+        // ── Name ──
+        section_header(ui, &self.colors, &sec.next_code(), "Name");
         ui.add_space(6.0);
         egui::Frame::new()
             .fill(self.colors.surface2)
@@ -115,8 +121,8 @@ impl App {
 
         ui.add_space(14.0);
 
-        // ── 02 / Parameter Set ──
-        section_header(ui, &self.colors, "02", "Parameter Set");
+        // ── Parameter Set ──
+        section_header(ui, &self.colors, &sec.next_code(), "Parameter Set");
         ui.add_space(6.0);
         egui::ComboBox::from_id_salt("wallet_modal_variant")
             .selected_text(
@@ -150,11 +156,11 @@ impl App {
 
         ui.add_space(14.0);
 
-        // ── 03 / Source (import only) ──
+        // ── Source (import only) ──
         // v1 web-wallet mnemonics derive the same keys but need the v1
         // single-sig address convention for existing funds to stay visible.
         if is_import {
-            section_header(ui, &self.colors, "03", "Source");
+            section_header(ui, &self.colors, &sec.next_code(), "Source");
             ui.add_space(6.0);
             v1_import_checkbox(ui, &self.colors, &mut self.import_from_v1);
             ui.add_space(4.0);
@@ -166,9 +172,8 @@ impl App {
             ui.add_space(14.0);
         }
 
-        // ── 03|04 / Authentication ──
-        let auth_idx = if is_import { "04" } else { "03" };
-        section_header(ui, &self.colors, auth_idx, "Authentication");
+        // ── Authentication ──
+        section_header(ui, &self.colors, &sec.next_code(), "Authentication");
         ui.add_space(8.0);
 
         let verb = if is_import { "Import" } else { "Create" };

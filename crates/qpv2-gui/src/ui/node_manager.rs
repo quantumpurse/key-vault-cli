@@ -7,6 +7,7 @@ use crate::types::{display_font, label_font, Status};
 use crate::ui::utils::{
     breathing_dot, ckb_split, data_row, data_row_colored, draw_trend_chart, ghost_button,
     group_thousands, lerp_color, panel_frame, row_hover, section_header, value_flash,
+    SectionCounter,
 };
 use crate::App;
 
@@ -44,42 +45,46 @@ impl App {
                 ui.add_space(12.0);
 
                 let backend = self.qp_client.config().node_type;
+                // Sections are numbered in render order because two of
+                // them are backend-conditional; fixed codes would leave
+                // gaps whenever one is skipped.
+                let mut sec = SectionCounter::new();
 
-                // ── 01 / Chain ───────────────────────────────
+                // ── Chain ────────────────────────────────────
                 panel_frame(&self.colors).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 6.0;
-                    section_header(ui, &self.colors, "01", "Chain");
+                    section_header(ui, &self.colors, &sec.next_code(), "Chain");
                     ui.add_space(6.0);
                     self.draw_blockchain_metrics(ui);
                 });
 
-                // ── 02 / Tx Pool (not available on LC) ──────
+                // ── Tx Pool (not available on LC) ────────────
                 if backend != NodeType::LightClient {
                     ui.add_space(12.0);
                     panel_frame(&self.colors).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 6.0;
-                        section_header(ui, &self.colors, "02", "Tx Pool");
+                        section_header(ui, &self.colors, &sec.next_code(), "Tx Pool");
                         ui.add_space(6.0);
                         self.draw_tx_pool_metrics(ui);
                     });
                 }
 
-                // ── 03 / Node ────────────────────────────────
+                // ── Node ─────────────────────────────────────
                 ui.add_space(12.0);
                 panel_frame(&self.colors).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 6.0;
-                    section_header(ui, &self.colors, "03", "Node");
+                    section_header(ui, &self.colors, &sec.next_code(), "Node");
                     ui.add_space(6.0);
                     self.draw_node_metrics(ui, backend);
                 });
 
-                // ── 04 / Peers ───────────────────────────────
+                // ── Peers ────────────────────────────────────
                 ui.add_space(12.0);
                 panel_frame(&self.colors).show(ui, |ui| {
                     section_header(
                         ui,
                         &self.colors,
-                        "04",
+                        &sec.next_code(),
                         &format!("Peers ({})", self.node_status.peers.len()),
                     );
                     if !self.node_status.peers.is_empty() {
@@ -88,20 +93,20 @@ impl App {
                     }
                 });
 
-                // ── 05 / Tracked Scripts (LC only) ──────────
+                // ── Tracked Scripts (LC only) ────────────────
                 if backend == NodeType::LightClient && !self.node_status.tracked_scripts.is_empty()
                 {
                     ui.add_space(12.0);
                     panel_frame(&self.colors).show(ui, |ui| {
-                        self.draw_tracked_scripts_section(ui);
+                        self.draw_tracked_scripts_section(ui, &sec.next_code());
                     });
                 }
 
-                // ── 06 / QR Lock Adoption ───────────────────
+                // ── QR Lock Adoption ─────────────────────────
                 ui.add_space(12.0);
                 panel_frame(&self.colors).show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    self.draw_qr_adoption_section(ui);
+                    self.draw_qr_adoption_section(ui, &sec.next_code());
                 });
 
                 // Applied after rendering so the frame draws against the
@@ -120,8 +125,8 @@ impl App {
     /// lives here with the rest of the node instrumentation — data via
     /// a public RPC indexer (the light client only sees its registered
     /// scripts), reconstructed from live cells' creation blocks.
-    fn draw_qr_adoption_section(&mut self, ui: &mut egui::Ui) {
-        section_header(ui, &self.colors, "06", "QR Lock Adoption");
+    fn draw_qr_adoption_section(&mut self, ui: &mut egui::Ui, code: &str) {
+        section_header(ui, &self.colors, code, "QR Lock Adoption");
         ui.add_space(8.0);
 
         match self.qr_adoption_series.last().copied() {
@@ -435,12 +440,12 @@ impl App {
 
     // ── Tracked scripts ──────────────────────────────────────
 
-    fn draw_tracked_scripts_section(&self, ui: &mut egui::Ui) {
+    fn draw_tracked_scripts_section(&self, ui: &mut egui::Ui, code: &str) {
         let scripts = &self.node_status.tracked_scripts;
         section_header(
             ui,
             &self.colors,
-            "05",
+            code,
             &format!("Tracked Scripts ({})", scripts.len()),
         );
         ui.add_space(6.0);

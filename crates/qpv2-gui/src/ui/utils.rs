@@ -338,6 +338,24 @@ pub(crate) fn panel_frame(colors: &AppColors) -> egui::Frame {
         .inner_margin(14.0)
 }
 
+/// Sequential section codes ("01", "02", ...) handed out in render
+/// order, so a conditionally skipped section never leaves a gap in a
+/// screen's numbering.
+#[derive(Default)]
+pub(crate) struct SectionCounter(u8);
+
+impl SectionCounter {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// The next two-digit section code.
+    pub(crate) fn next_code(&mut self) -> String {
+        self.0 += 1;
+        format!("{:02}", self.0)
+    }
+}
+
 /// Section header: `CODE // TITLE` in tiny uppercase label type with a
 /// hairline rule filling the remaining width.
 pub(crate) fn section_header(ui: &mut egui::Ui, colors: &AppColors, code: &str, title: &str) {
@@ -395,12 +413,37 @@ pub(crate) fn data_row_colored(
 /// Shared by the setup screen and the import modal so the two entry
 /// points can never drift apart.
 pub(crate) fn v1_import_checkbox(ui: &mut egui::Ui, colors: &AppColors, checked: &mut bool) {
-    ui.checkbox(
-        checked,
-        egui::RichText::new("Seed comes from the Quantum Purse v1 web wallet.")
-            .size(12.0)
-            .color(colors.text),
-    );
+    let w = colors.warn;
+    let (fill, stroke, label) = if *checked {
+        (
+            colors.warn_tint,
+            egui::Color32::from_rgba_unmultiplied(w.r(), w.g(), w.b(), 90),
+            colors.warn,
+        )
+    } else {
+        (egui::Color32::TRANSPARENT, colors.border, colors.text)
+    };
+    egui::Frame::new()
+        .fill(fill)
+        .stroke(egui::Stroke::new(1.0, stroke))
+        .inner_margin(egui::Margin::symmetric(8, 6))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if *checked {
+                // Tint the checkmark to match; egui draws it with the
+                // interact-state fg_stroke.
+                let v = ui.visuals_mut();
+                v.widgets.inactive.fg_stroke.color = w;
+                v.widgets.hovered.fg_stroke.color = w;
+                v.widgets.active.fg_stroke.color = w;
+            }
+            ui.checkbox(
+                checked,
+                egui::RichText::new("Seed comes from the Quantum Purse v1 web wallet.")
+                    .size(12.0)
+                    .color(label),
+            );
+        });
 }
 
 /// Tiny uppercase badge in a tinted, hairline-stroked box.

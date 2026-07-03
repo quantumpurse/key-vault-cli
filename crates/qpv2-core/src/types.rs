@@ -35,10 +35,10 @@ pub struct Signer {
 
 /// Single-sig accounts are a degenerate case of multisig: 1/1 msig.
 /// With this kind of account, required_first_n being 0 or 1 both make sense.
-/// But the two formats hash to different lock script args, 
+/// But the two formats hash to different lock script args,
 /// so a wallet must consistently use the same one for all accounts it creates.
 /// This enum encodes that choice.
-/// 
+///
 /// Both formats are valid on-chain but hash to different addresses, so a
 /// wallet must consistently use the one its funds were received on.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -150,7 +150,11 @@ impl MultisigConfig {
     /// (`required_first_n: 1`), with threshold 1 of 1 total. See
     /// <https://github.com/nervosnetwork/quantum-resistant-lock-script/blob/main/docs/simple.md>.
     /// `SingleSigConvention::V1` deviates with `required_first_n: 0`.
-    pub fn single_sig(variant: SpxVariant, pubkey: Vec<u8>, convention: SingleSigConvention) -> Self {
+    pub fn single_sig(
+        variant: SpxVariant,
+        pubkey: Vec<u8>,
+        convention: SingleSigConvention,
+    ) -> Self {
         MultisigConfig {
             required_first_n: convention.required_first_n(),
             threshold: 1,

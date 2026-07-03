@@ -6,7 +6,7 @@
 use eframe::egui;
 
 use crate::types::{label_font, AppColors, TransactionStatus};
-use crate::ui::utils::{ghost_button, panel_frame, section_header};
+use crate::ui::utils::{ghost_button, panel_frame, section_header, SectionCounter};
 use crate::App;
 
 /// Section header with a step pointer: the active step's title renders
@@ -404,13 +404,17 @@ impl App {
 
     /// Co-signer signing flow: paste a signing request, verify details,
     /// sign with a local key, and copy the response.
-    pub(crate) fn show_sign_request_ui(&mut self, ui: &mut egui::Ui) {
+    ///
+    /// Renders exactly one panel — the response replaces the request
+    /// form — so it draws one code from the screen's shared counter.
+    pub(crate) fn show_sign_request_ui(&mut self, ui: &mut egui::Ui, sec: &mut SectionCounter) {
         ui.add_space(16.0);
+        let code = sec.next_code();
 
         // ── Completed response: copy-back panel ──
         if let Some(response_copy) = self.cosign_response_json.clone() {
             panel_frame(&self.colors).show(ui, |ui| {
-                section_header(ui, &self.colors, "02", "Response");
+                section_header(ui, &self.colors, &code, "Response");
                 ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
@@ -465,7 +469,7 @@ impl App {
 
         // ── Paste + verify + sign panel ──
         panel_frame(&self.colors).show(ui, |ui| {
-            section_header(ui, &self.colors, "01", "Signing Request");
+            section_header(ui, &self.colors, &code, "Signing Request");
             ui.add_space(4.0);
             ui.label(
                 egui::RichText::new("Paste a signing request from another party to co-sign.")

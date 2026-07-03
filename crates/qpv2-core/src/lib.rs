@@ -316,8 +316,11 @@ impl KeyVault {
         })?;
 
         let single_sig_convention = Self::get_single_sig_convention(self.wallet_id)?;
-        let config =
-            MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec(), single_sig_convention);
+        let config = MultisigConfig::single_sig(
+            self.variant,
+            pub_key.as_ref().to_vec(),
+            single_sig_convention,
+        );
         let lock_script_args = config.lock_script_args();
 
         let account = SphincsPlusAccount {
@@ -774,8 +777,11 @@ impl KeyVault {
                 msg
             })?;
 
-            let config =
-                MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec(), single_sig_convention);
+            let config = MultisigConfig::single_sig(
+                self.variant,
+                pub_key.as_ref().to_vec(),
+                single_sig_convention,
+            );
             let lock_script_args = config.lock_script_args();
             lock_args_array.push(encode(lock_script_args));
         }
@@ -815,8 +821,11 @@ impl KeyVault {
                 msg
             })?;
 
-            let config =
-                MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec(), single_sig_convention);
+            let config = MultisigConfig::single_sig(
+                self.variant,
+                pub_key.as_ref().to_vec(),
+                single_sig_convention,
+            );
             let lock_script_args = config.lock_script_args();
 
             let account = SphincsPlusAccount {
