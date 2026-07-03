@@ -123,6 +123,7 @@ pub(crate) struct CurrentWallet {
     pub name: String,
     pub spx_variant: qpv2_core::types::SpxVariant,
     pub auth_method: qpv2_core::types::AuthMethod,
+    pub single_sig_convention: qpv2_core::types::SingleSigConvention,
     pub account_count: usize,
     pub path: String,
 }

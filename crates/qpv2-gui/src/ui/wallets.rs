@@ -2,7 +2,7 @@
 //! rename, switch, and delete wallets.
 
 use eframe::egui;
-use qpv2_core::types::AuthMethod;
+use qpv2_core::types::{AuthMethod, SingleSigConvention};
 use qpv2_core::KeyVault;
 
 use super::accounts::{header_cell, table_rule, truncate_middle};
@@ -87,6 +87,7 @@ impl App {
                             self.wallet_modal = crate::types::WalletModal::Import;
                             self.new_wallet_name.clear();
                             self.new_wallet_variant = qpv2_core::types::SpxVariant::Sha2128S;
+                            self.import_from_v1 = false;
                         }
                         let create =
                             accent_button(&self.colors, "NEW WALLET", egui::vec2(120.0, 24.0));
@@ -94,6 +95,7 @@ impl App {
                             self.wallet_modal = crate::types::WalletModal::Create;
                             self.new_wallet_name.clear();
                             self.new_wallet_variant = qpv2_core::types::SpxVariant::Sha2128S;
+                            self.import_from_v1 = false;
                         }
                     });
                     ui.add_space(10.0);
@@ -212,6 +214,7 @@ impl App {
                     AuthMethod::Keychain => keychain::short_name().to_string(),
                     AuthMethod::Fido2 { .. } => "FIDO2".to_string(),
                 };
+                let cw_is_v1 = cw.single_sig_convention == SingleSigConvention::V1;
                 let cw_acct_count = cw.account_count;
                 let cw_path = cw.path.clone();
                 let is_active = cw_id == self.wallet_id;
@@ -300,6 +303,13 @@ impl App {
                             |ui| {
                                 ui.set_min_width(COL_VAR);
                                 badge(ui, &cw_variant, self.colors.accent3);
+                                // Imported v1 web-wallet vaults use the v1
+                                // single-sig address format; flag them so a
+                                // wrong import choice is diagnosable.
+                                if cw_is_v1 {
+                                    ui.add_space(4.0);
+                                    badge(ui, "V1", self.colors.warn);
+                                }
                             },
                         );
 

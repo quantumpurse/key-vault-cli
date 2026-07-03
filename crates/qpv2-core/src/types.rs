@@ -33,6 +33,57 @@ pub struct Signer {
     pub pubkey: Vec<u8>,
 }
 
+/// Single-sig accounts are a degenerate case of multisig: 1/1 msig.
+/// With this kind of account, required_first_n being 0 or 1 both make sense.
+/// But the two formats hash to different lock script args, 
+/// so a wallet must consistently use the same one for all accounts it creates.
+/// This enum encodes that choice.
+/// 
+/// Both formats are valid on-chain but hash to different addresses, so a
+/// wallet must consistently use the one its funds were received on.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SingleSigConvention {
+    /// `<80 01 01 01 param_id>` — the single-sig config documented by the
+    /// quantum-resistant lock script. Used by all wallets except v1 imports.
+    #[default]
+    Standard,
+    /// `<80 00 01 01 param_id>` — the config the Quantum Purse v1 web
+    /// wallet used (`required_first_n: 0`). Selectable at mnemonic import
+    /// so v1 users keep access to their funds.
+    /// See https://github.com/quantumpurse/key-vault-wasm/issues/10
+    V1,
+}
+
+impl SingleSigConvention {
+    /// Maps an "importing from the v1 web wallet" flag to its format.
+    /// The single place this decision is encoded — UI checkboxes and
+    /// CLI flags must all convert through here.
+    pub fn new(is_v1: bool) -> Self {
+        if is_v1 {
+            Self::V1
+        } else {
+            Self::Standard
+        }
+    }
+
+    /// The `required_first_n` header byte this format maps to.
+    pub fn required_first_n(&self) -> u8 {
+        match self {
+            Self::Standard => 1,
+            Self::V1 => 0,
+        }
+    }
+}
+
+impl fmt::Display for SingleSigConvention {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Standard => write!(f, "Standard"),
+            Self::V1 => write!(f, "V1"),
+        }
+    }
+}
+
 /// Configuration for the CKB quantum-resistant lock script's all-in-one multisig header.
 /// Every account uses this — a "single-sig" account is threshold=1 with one signer.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -98,9 +149,10 @@ impl MultisigConfig {
     /// config as `<80 01 01 01 param_id>`: the sole signer is required
     /// (`required_first_n: 1`), with threshold 1 of 1 total. See
     /// <https://github.com/nervosnetwork/quantum-resistant-lock-script/blob/main/docs/simple.md>.
-    pub fn single_sig(variant: SpxVariant, pubkey: Vec<u8>) -> Self {
+    /// `SingleSigConvention::V1` deviates with `required_first_n: 0`.
+    pub fn single_sig(variant: SpxVariant, pubkey: Vec<u8>, convention: SingleSigConvention) -> Self {
         MultisigConfig {
-            required_first_n: 1,
+            required_first_n: convention.required_first_n(),
             threshold: 1,
             signers: vec![Signer { variant, pubkey }],
         }
@@ -268,6 +320,9 @@ pub struct WalletInfo {
     pub spx_variant: SpxVariant,
     #[serde(default)]
     pub auth_method: AuthMethod,
+    /// Single-sig header convention for every account in this wallet.
+    #[serde(default)]
+    pub single_sig_convention: SingleSigConvention,
 }
 
 /// ID of all 12 SPHINCS+ variants following https://github.com/cryptape/quantum-resistant-lock-script/pull/14

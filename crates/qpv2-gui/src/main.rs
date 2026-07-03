@@ -58,6 +58,9 @@ pub(crate) struct App {
     // Temporary values for new wallet creation in popup.
     pub(crate) new_wallet_name: String,
     pub(crate) new_wallet_variant: SpxVariant,
+    // Whether the mnemonic being imported comes from the Quantum Purse
+    // v1 web wallet, which used a different single-sig address convention.
+    pub(crate) import_from_v1: bool,
 
     // Wallet create/import modal state.
     pub(crate) wallet_modal: types::WalletModal,
@@ -407,6 +410,7 @@ impl App {
             wallet_selector_rect: None,
             new_wallet_name: String::new(),
             new_wallet_variant: SpxVariant::Sha2128S,
+            import_from_v1: false,
             wallet_modal: types::WalletModal::None,
             selected_variant: SpxVariant::Sha2128S,
             import_mode: false,

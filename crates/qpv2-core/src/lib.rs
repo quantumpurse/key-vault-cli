@@ -136,6 +136,14 @@ impl KeyVault {
         Ok(wallet_info.spx_variant)
     }
 
+    /// Retrieves the wallet's single-sig single-sig convention.
+    ///
+    /// **Returns**:
+    /// - `Result<SingleSigConvention, String>` - The single-sig convention recorded at wallet creation, or an error on failure.
+    pub fn get_single_sig_convention(wallet_id: u32) -> Result<SingleSigConvention, String> {
+        Ok(Self::read_wallet_info(wallet_id)?.single_sig_convention)
+    }
+
     /// Retrieves all SPHINCS+ lock script arguments (processed public keys) from the database in the order they get inserted.
     ///
     /// **Returns**:
@@ -263,10 +271,13 @@ impl KeyVault {
         db::create_wallet_dir(self.wallet_id).map_err(|e| e.to_string())?;
         db::set_encrypted_seed(self.wallet_id, encrypted_seed).map_err(|e| e.to_string())?;
 
+        // All wallets are single-sig by default.
+        // All single-sig wallets use the standard single-sig convention.
         let wallet_info = types::WalletInfo {
             name: name.to_string(),
             spx_variant: self.variant,
             auth_method,
+            single_sig_convention: SingleSigConvention::Standard,
         };
         db::set_wallet_info(self.wallet_id, wallet_info).map_err(|e| e.to_string())?;
 
@@ -304,7 +315,9 @@ impl KeyVault {
             msg
         })?;
 
-        let config = MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec());
+        let single_sig_convention = Self::get_single_sig_convention(self.wallet_id)?;
+        let config =
+            MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec(), single_sig_convention);
         let lock_script_args = config.lock_script_args();
 
         let account = SphincsPlusAccount {
@@ -417,6 +430,7 @@ impl KeyVault {
         auth: AuthKey,
         auth_method: AuthMethod,
         name: &str,
+        single_sig_convention: SingleSigConvention,
     ) -> Result<(), String> {
         Self::validate_auth(&auth)?;
         db::wallets::validate_wallet_name(name, None).map_err(|e| e.to_string())?;
@@ -467,6 +481,7 @@ impl KeyVault {
             name: name.to_string(),
             spx_variant: self.variant,
             auth_method,
+            single_sig_convention,
         };
         db::set_wallet_info(self.wallet_id, wallet_info).map_err(|e| e.to_string())?;
 
@@ -750,6 +765,7 @@ impl KeyVault {
                 "Master seed not found".to_string()
             })?;
         let seed = utilities::decrypt(&auth, payload)?;
+        let single_sig_convention = Self::get_single_sig_convention(self.wallet_id)?;
         let mut lock_args_array: Vec<String> = Vec::new();
         for index in start_index..(start_index + count) {
             let (pub_key, _) = self.derive_spx_keys(&seed, index).map_err(|e| {
@@ -758,7 +774,8 @@ impl KeyVault {
                 msg
             })?;
 
-            let config = MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec());
+            let config =
+                MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec(), single_sig_convention);
             let lock_script_args = config.lock_script_args();
             lock_args_array.push(encode(lock_script_args));
         }
@@ -790,6 +807,7 @@ impl KeyVault {
             })?;
         let mut lock_args_array: Vec<String> = Vec::new();
         let seed = utilities::decrypt(&auth, payload)?;
+        let single_sig_convention = Self::get_single_sig_convention(self.wallet_id)?;
         for index in 0..count {
             let (pub_key, _) = self.derive_spx_keys(&seed, index).map_err(|e| {
                 let msg = format!("Key derivation error: {}", e);
@@ -797,7 +815,8 @@ impl KeyVault {
                 msg
             })?;
 
-            let config = MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec());
+            let config =
+                MultisigConfig::single_sig(self.variant, pub_key.as_ref().to_vec(), single_sig_convention);
             let lock_script_args = config.lock_script_args();
 
             let account = SphincsPlusAccount {

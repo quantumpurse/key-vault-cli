@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use qpv2_core::types::{AuthKey, AuthMethod, SpxVariant};
+use qpv2_core::types::{AuthKey, AuthMethod, SingleSigConvention, SpxVariant};
 use qpv2_core::KeyVault;
 use qpv2_core::SecureString;
 use rpassword::read_password;
@@ -140,6 +140,10 @@ enum MnemonicCommands {
         /// Use a FIDO2 security key with hmac-secret extension
         #[arg(long)]
         fido2: bool,
+
+        /// Import from the Quantum Purse v1 wallet (uses its legacy address format)
+        #[arg(long)]
+        v1: bool,
     },
     Export {
         #[arg(short, long)]
@@ -420,10 +424,12 @@ fn init_with_keychain(vault: &KeyVault, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+// All wallets are imported as single-sig wallet by default.
 fn import_with_keychain(
     vault: &KeyVault,
     seed_phrase: SecureString,
     name: &str,
+    single_sig_convention: SingleSigConvention,
 ) -> Result<(), String> {
     let key = qpv2_core::utilities::get_random_bytes(32)
         .map_err(|e| format!("Failed to generate key: {}", e))?;
@@ -433,6 +439,7 @@ fn import_with_keychain(
         AuthKey::CryptoKey(key),
         AuthMethod::Keychain,
         name,
+        single_sig_convention,
     ) {
         let _ = keychain::delete_key(vault.wallet_id);
         return Err(e);
@@ -455,10 +462,12 @@ fn init_with_fido2(vault: &KeyVault, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+// All wallets are imported as single-sig wallet by default.
 fn import_with_fido2(
     vault: &KeyVault,
     seed_phrase: SecureString,
     name: &str,
+    single_sig_convention: SingleSigConvention,
 ) -> Result<(), String> {
     let pin = prompt_for_input("Enter security key PIN: ")?;
     println!("Registering credential...");
@@ -470,7 +479,13 @@ fn import_with_fido2(
     let key = qpv2_core::utilities::derive_vault_enc_key(&hmac_output)?;
 
     let auth_method = AuthMethod::Fido2 { credential_id };
-    vault.import_seed_phrase(seed_phrase, AuthKey::CryptoKey(key), auth_method, name)?;
+    vault.import_seed_phrase(
+        seed_phrase,
+        AuthKey::CryptoKey(key),
+        auth_method,
+        name,
+        single_sig_convention,
+    )?;
     Ok(())
 }
 
@@ -1308,10 +1323,12 @@ fn main() -> Result<(), String> {
                 seed_file,
                 keychain,
                 fido2,
+                v1,
             } => {
                 let variant = parse_variant(&variant)?;
                 let (wallet_id, name) = prepare_new_wallet(&cli.wallet)?;
                 let vault = KeyVault::new(variant, wallet_id);
+                let single_sig_convention = SingleSigConvention::new(v1);
 
                 let seed_phrase = if let Some(file_path) = seed_file {
                     SecureString::from_string(
@@ -1324,9 +1341,9 @@ fn main() -> Result<(), String> {
                 if keychain && fido2 {
                     return Err("Cannot use both --keychain and --fido2.".to_string());
                 } else if fido2 {
-                    import_with_fido2(&vault, seed_phrase, &name)?;
+                    import_with_fido2(&vault, seed_phrase, &name, single_sig_convention)?;
                 } else if keychain {
-                    import_with_keychain(&vault, seed_phrase, &name)?;
+                    import_with_keychain(&vault, seed_phrase, &name, single_sig_convention)?;
                 } else {
                     let password = prompt_for_input("Enter password: ")?;
                     let confirm = prompt_for_input("Confirm password: ")?;
@@ -1346,6 +1363,7 @@ fn main() -> Result<(), String> {
                         AuthKey::Password(password),
                         AuthMethod::Password,
                         &name,
+                        single_sig_convention,
                     )?;
                 }
                 println!("✓ Seed phrase imported successfully");
@@ -1757,10 +1775,11 @@ fn main() -> Result<(), String> {
                         };
 
                         println!("  [{}] {}", entry.id, entry.name);
-                        println!("      Variant        : {}", wallet_info.spx_variant);
-                        println!("      Authentication : {}", auth_method_display);
-                        println!("      Accounts       : {}", accounts.len());
-                        println!("      Path           : {}", data_path.display());
+                        println!("      Variant               : {}", wallet_info.spx_variant);
+                        println!("      Authentication        : {}", auth_method_display);
+                        println!("      Single-sig convention : {}", wallet_info.single_sig_convention);
+                        println!("      Accounts              : {}", accounts.len());
+                        println!("      Path                  : {}", data_path.display());
                         println!();
                     }
                 }

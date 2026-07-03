@@ -390,6 +390,19 @@ pub(crate) fn data_row_colored(
     });
 }
 
+/// Checkbox marking a mnemonic import as coming from the Quantum Purse
+/// v1 web wallet, which used a different single-sig address format.
+/// Shared by the setup screen and the import modal so the two entry
+/// points can never drift apart.
+pub(crate) fn v1_import_checkbox(ui: &mut egui::Ui, colors: &AppColors, checked: &mut bool) {
+    ui.checkbox(
+        checked,
+        egui::RichText::new("Seed comes from the Quantum Purse v1 web wallet.")
+            .size(12.0)
+            .color(colors.text),
+    );
+}
+
 /// Tiny uppercase badge in a tinted, hairline-stroked box.
 pub(crate) fn badge(ui: &mut egui::Ui, text: &str, color: egui::Color32) {
     let tint = egui::Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 24);

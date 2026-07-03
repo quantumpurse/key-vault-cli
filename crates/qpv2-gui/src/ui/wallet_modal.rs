@@ -4,10 +4,10 @@
 //! so the modal only collects name, parameter set, and auth method.
 
 use eframe::egui;
-use qpv2_core::types::SpxVariant;
+use qpv2_core::types::{SingleSigConvention, SpxVariant};
 
 use crate::types::{label_font, WalletModal};
-use crate::ui::utils::{accent_button, ghost_button, section_header};
+use crate::ui::utils::{accent_button, ghost_button, section_header, v1_import_checkbox};
 use crate::App;
 
 const MODAL_W: f32 = 440.0;
@@ -59,6 +59,7 @@ impl App {
         if backdrop_clicked {
             self.wallet_modal = WalletModal::None;
             self.new_wallet_name.clear();
+            self.import_from_v1 = false;
         }
     }
 
@@ -149,8 +150,25 @@ impl App {
 
         ui.add_space(14.0);
 
-        // ── 03 / Authentication ──
-        section_header(ui, &self.colors, "03", "Authentication");
+        // ── 03 / Source (import only) ──
+        // v1 web-wallet mnemonics derive the same keys but need the v1
+        // single-sig address convention for existing funds to stay visible.
+        if is_import {
+            section_header(ui, &self.colors, "03", "Source");
+            ui.add_space(6.0);
+            v1_import_checkbox(ui, &self.colors, &mut self.import_from_v1);
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("v1 used a different address format. Check this so the funds on your v1 addresses stay visible.")
+                    .size(10.0)
+                    .color(c_muted),
+            );
+            ui.add_space(14.0);
+        }
+
+        // ── 03|04 / Authentication ──
+        let auth_idx = if is_import { "04" } else { "03" };
+        section_header(ui, &self.colors, auth_idx, "Authentication");
         ui.add_space(8.0);
 
         let verb = if is_import { "Import" } else { "Create" };
@@ -159,6 +177,8 @@ impl App {
 
         // Platform keychain is the recommended path — the one solid
         // solid-accent action in this modal.
+        let single_sig_convention = SingleSigConvention::new(self.import_from_v1);
+
         let kc_label = format!("{} // {}", verb, keychain::short_name());
         if ui
             .add(accent_button(&self.colors, &kc_label, btn_size))
@@ -166,11 +186,12 @@ impl App {
         {
             let v = self.new_wallet_variant;
             if is_import {
-                self.import_seed_phrase_with_keychain(v);
+                self.import_seed_phrase_with_keychain(v, single_sig_convention);
             } else {
                 self.create_wallet_with_keychain(v);
             }
             self.wallet_modal = WalletModal::None;
+            self.import_from_v1 = false;
         }
 
         ui.add_space(6.0);
@@ -181,11 +202,12 @@ impl App {
         {
             let v = self.new_wallet_variant;
             if is_import {
-                self.import_seed_phrase_with_fido2(v);
+                self.import_seed_phrase_with_fido2(v, single_sig_convention);
             } else {
                 self.create_wallet_with_fido2(v);
             }
             self.wallet_modal = WalletModal::None;
+            self.import_from_v1 = false;
         }
 
         ui.add_space(6.0);
@@ -196,11 +218,12 @@ impl App {
         {
             let v = self.new_wallet_variant;
             if is_import {
-                self.import_seed_phrase_with_password(v);
+                self.import_seed_phrase_with_password(v, single_sig_convention);
             } else {
                 self.create_wallet_with_password(v);
             }
             self.wallet_modal = WalletModal::None;
+            self.import_from_v1 = false;
         }
 
         ui.add_space(14.0);
@@ -219,6 +242,7 @@ impl App {
         {
             self.wallet_modal = WalletModal::None;
             self.new_wallet_name.clear();
+            self.import_from_v1 = false;
         }
     }
 }

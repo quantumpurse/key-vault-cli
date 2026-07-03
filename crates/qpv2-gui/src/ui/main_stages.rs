@@ -4,12 +4,12 @@
 use crate::types::{display_font, label_font, Status, Tab};
 use crate::ui::utils::{
     accent_button, blinking_cursor, breathing_dot, ghost_button, panel_frame, section_header,
-    value_flash,
+    v1_import_checkbox, value_flash,
 };
 use crate::App;
 use ckb_node::NodeType;
 use eframe::egui;
-use qpv2_core::types::{AuthMethod, SpxVariant};
+use qpv2_core::types::{AuthMethod, SingleSigConvention, SpxVariant};
 
 /// Height of the top telemetry strip.
 const TELEMETRY_H: f32 = 38.0;
@@ -566,6 +566,11 @@ impl App {
                         ui.add_space(16.0);
                         section_header(ui, &self.colors, "03", "Restore From Seed Phrase");
                         ui.add_space(8.0);
+                        // v1 web-wallet mnemonics derive the same keys but
+                        // need the v1 single-sig address format for existing
+                        // funds to stay visible.
+                        v1_import_checkbox(ui, &self.colors, &mut self.import_from_v1);
+                        ui.add_space(8.0);
                         self.draw_auth_row(ui, panel_w - 30.0, true);
                     });
                 },
@@ -681,14 +686,18 @@ impl App {
                 let btn = ghost_button(&self.colors, label, size);
                 if ui.add(btn).clicked() {
                     let v = self.selected_variant;
+                    let ssc = SingleSigConvention::new(self.import_from_v1);
                     match (import, idx) {
                         (false, 0) => self.create_wallet_with_keychain(v),
                         (false, 1) => self.create_wallet_with_fido2(v),
                         (false, _) => self.create_wallet_with_password(v),
-                        (true, 0) => self.import_seed_phrase_with_keychain(v),
-                        (true, 1) => self.import_seed_phrase_with_fido2(v),
-                        (true, _) => self.import_seed_phrase_with_password(v),
+                        (true, 0) => self.import_seed_phrase_with_keychain(v, ssc),
+                        (true, 1) => self.import_seed_phrase_with_fido2(v, ssc),
+                        (true, _) => self.import_seed_phrase_with_password(v, ssc),
                     }
+                    // The v1 choice is consumed by this action; a stale
+                    // `true` would pre-check the box on the next import.
+                    self.import_from_v1 = false;
                 }
             }
         });

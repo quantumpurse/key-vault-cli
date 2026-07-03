@@ -1,6 +1,6 @@
 //! Wallet lifecycle: create, unlock, lock, new account, config.
 
-use qpv2_core::types::{AuthKey, AuthMethod, SpxVariant};
+use qpv2_core::types::{AuthKey, AuthMethod, SingleSigConvention, SpxVariant};
 use qpv2_core::KeyVault;
 
 use crate::tx_history::TxHistoryStore;
@@ -27,6 +27,7 @@ impl App {
                     name: entry.name,
                     spx_variant: info.spx_variant,
                     auth_method: info.auth_method,
+                    single_sig_convention: info.single_sig_convention,
                     account_count,
                     path,
                 })
@@ -559,7 +560,11 @@ impl App {
         }
     }
 
-    pub(crate) fn import_seed_phrase_with_password(&mut self, variant: SpxVariant) {
+    pub(crate) fn import_seed_phrase_with_password(
+        &mut self,
+        variant: SpxVariant,
+        single_sig_convention: SingleSigConvention,
+    ) {
         let (wallet_id, wallet_name) = match self.prepare_new_wallet() {
             Ok(v) => v,
             Err(e) => {
@@ -610,6 +615,7 @@ impl App {
             AuthKey::Password(pw),
             AuthMethod::Password,
             &wallet_name,
+            single_sig_convention,
         ) {
             let msg = format!("Failed to import wallet: {}", e);
             tracing::error!("{}", msg);
@@ -828,7 +834,11 @@ impl App {
         }
     }
 
-    pub(crate) fn import_seed_phrase_with_keychain(&mut self, variant: SpxVariant) {
+    pub(crate) fn import_seed_phrase_with_keychain(
+        &mut self,
+        variant: SpxVariant,
+        single_sig_convention: SingleSigConvention,
+    ) {
         let (wallet_id, wallet_name) = match self.prepare_new_wallet() {
             Ok(v) => v,
             Err(e) => {
@@ -871,6 +881,7 @@ impl App {
             AuthKey::CryptoKey(key),
             AuthMethod::Keychain,
             &wallet_name,
+            single_sig_convention,
         ) {
             let _ = keychain::delete_key(wallet_id);
             let msg = format!("Failed to import wallet: {}", e);
@@ -1033,7 +1044,11 @@ impl App {
         }
     }
 
-    pub(crate) fn import_seed_phrase_with_fido2(&mut self, variant: SpxVariant) {
+    pub(crate) fn import_seed_phrase_with_fido2(
+        &mut self,
+        variant: SpxVariant,
+        single_sig_convention: SingleSigConvention,
+    ) {
         let (wallet_id, wallet_name) = match self.prepare_new_wallet() {
             Ok(v) => v,
             Err(e) => {
@@ -1107,6 +1122,7 @@ impl App {
             AuthKey::CryptoKey(key),
             auth_method.clone(),
             &wallet_name,
+            single_sig_convention,
         ) {
             let msg = format!("Failed to import wallet: {}", e);
             tracing::error!("{}", msg);
