@@ -87,6 +87,11 @@ impl App {
         wallet_id: u32,
         wallet_name: String,
     ) {
+        // Same wipe as `switch_wallet`: creating or importing switches
+        // the active wallet too, and the previous wallet's runtime state
+        // (balance maps, DAO caches, in-flight receivers) would
+        // otherwise bleed into the new wallet's dashboard.
+        self.clear_wallet_state();
         self.wallet_id = wallet_id;
         self.wallet_name = wallet_name;
         match KeyVault::get_all_accounts(self.wallet_id) {
