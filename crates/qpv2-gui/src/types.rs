@@ -115,6 +115,11 @@ pub(crate) enum TxHistoryEvent {
     /// watermark is derived from the merged `tx_history` vector, so no
     /// payload is needed here.
     Done,
+    /// Emitted when the sync gives up because a lookup stayed
+    /// unavailable past its retry budget. The records streamed so far
+    /// must be discarded: the watermark derived from a partial batch
+    /// would skip the transactions that were never emitted.
+    Aborted,
 }
 
 /// Pre-fetched wallet metadata so rendering never hits the filesystem.

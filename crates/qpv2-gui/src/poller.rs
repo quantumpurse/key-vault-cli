@@ -298,14 +298,19 @@ impl App {
                     // instantly and the next sync only pulls blocks above
                     // the derived watermark. Scoped to the active network
                     // so mainnet and testnet caches can't cross-contaminate.
-                    // A write failure here is non-fatal — the next tick
-                    // will save the same state again.
+                    // A write failure here is non-fatal — the next
+                    // completed sync saves the merged state again.
                     let store = crate::tx_history::TxHistoryStore {
                         records: self.tx_history.clone(),
                     };
                     if let Err(e) = store.save(self.wallet_id, self.qp_client.network().tag()) {
                         tracing::error!("tx_history: failed to persist: {}", e);
                     }
+                    break;
+                }
+                Ok(Ok(TxHistoryEvent::Aborted)) => {
+                    self.tx_history_rx = None;
+                    self.rollback_tx_history();
                     break;
                 }
                 Ok(Err(e)) => {
@@ -319,11 +324,37 @@ impl App {
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
+                    // The sync thread died without a terminal event
+                    // (panic); its partial batch is as unsafe as an
+                    // aborted one.
                     self.tx_history_rx = None;
+                    self.rollback_tx_history();
                     break;
                 }
             }
         }
+    }
+
+    /// Restores `tx_history` to the last saved snapshot, discarding
+    /// records streamed by a sync that didn't finish. A history sync
+    /// emits newest-first, so a partial batch holds the newest records
+    /// only — the watermark derived from it would sit above the older
+    /// transactions that were never emitted, and the next incremental
+    /// sync would skip them for good. Disk is written only on `Done`,
+    /// so it is always a consistent baseline.
+    fn rollback_tx_history(&mut self) {
+        self.tx_history =
+            crate::tx_history::TxHistoryStore::load(self.wallet_id, self.qp_client.network().tag())
+                .unwrap_or_else(|e| {
+                    tracing::error!("tx_history: rollback failed to load snapshot: {}", e);
+                    None
+                })
+                .map(|store| store.records)
+                .unwrap_or_default();
+        tracing::warn!(
+            "tx_history: sync did not finish; rolled back to {} saved records",
+            self.tx_history.len()
+        );
     }
 
     /// Drain the node-status channel into `self.node_status`. A status

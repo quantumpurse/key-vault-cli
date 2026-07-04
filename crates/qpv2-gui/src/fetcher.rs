@@ -13,39 +13,61 @@ use crate::App;
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(500);
 /// Cap on the exponential backoff.
 const RETRY_MAX_DELAY: Duration = Duration::from_secs(30);
+/// Attempts before a lookup is declared unavailable. Backoff sleeps
+/// total ~60s; each attempt may additionally spend up to the RPC
+/// timeout inside the call.
+const RETRY_ATTEMPTS: u32 = 8;
 
-/// Retries `f` forever with exponential backoff (capped at
-/// `RETRY_MAX_DELAY`) until it returns `Ok(Some(v))`. Both `Err(_)` and
-/// `Ok(None)` are treated as "try again" and logged distinctly.
+/// Retries `f` with exponential backoff (capped at `RETRY_MAX_DELAY`)
+/// until it returns `Ok(Some(v))`, giving up with `None` after
+/// `RETRY_ATTEMPTS` calls. Both `Err(_)` and `Ok(None)` are treated as
+/// "try again" and logged distinctly.
 ///
 /// Callers that can never produce a legitimate `None` (e.g. the indexer
 /// returning `Vec<Tx>`) adapt with `.map(Some)`. Callers that do
 /// (`get_transaction`, `get_header`) pass their `Result<Option<T>, _>`
 /// through unchanged.
 ///
-/// Used by the tx-history sync thread so a transient public-RPC failure
-/// never drops a tx silently. See `BACKLOG.md` ("Reorg handling") for the
-/// cancellation story once reorg-aware sync lands.
-fn retry_until_ready<T, E: Display>(tag: &str, mut f: impl FnMut() -> Result<Option<T>, E>) -> T {
+/// Bounded because some lookups depend on data other nodes may never
+/// serve (a P2P transaction fetch, a reorged-away block). The history
+/// sync holds the single in-flight slot, so on give-up it must abort
+/// and yield — a later sync re-derives its work list from current
+/// chain state — rather than wait indefinitely on one lookup. See
+/// `BACKLOG.md` ("Reorg handling") for the open gap on records already
+/// persisted when a reorg strikes.
+fn retry_bounded<T, E: Display>(
+    tag: &str,
+    mut f: impl FnMut() -> Result<Option<T>, E>,
+) -> Option<T> {
     let mut delay = RETRY_BASE_DELAY;
-    loop {
+    for attempt in 1..=RETRY_ATTEMPTS {
         match f() {
-            Ok(Some(v)) => return v,
+            Ok(Some(v)) => return Some(v),
             Ok(None) => {
-                tracing::warn!("tx history: {} returned None, retrying in {:?}", tag, delay);
+                tracing::warn!(
+                    "tx history: {} returned None (attempt {}/{})",
+                    tag,
+                    attempt,
+                    RETRY_ATTEMPTS
+                );
             }
             Err(e) => {
                 tracing::warn!(
-                    "tx history: {} failed ({}), retrying in {:?}",
+                    "tx history: {} failed ({}) (attempt {}/{})",
                     tag,
                     e,
-                    delay
+                    attempt,
+                    RETRY_ATTEMPTS
                 );
             }
         }
-        std::thread::sleep(delay);
-        delay = (delay * 2).min(RETRY_MAX_DELAY);
+        if attempt < RETRY_ATTEMPTS {
+            std::thread::sleep(delay);
+            delay = (delay * 2).min(RETRY_MAX_DELAY);
+        }
     }
+    tracing::warn!("tx history: {} unavailable, giving up", tag);
+    None
 }
 
 /// Parses the port out of an RPC URL (`http://host:port` or
@@ -197,6 +219,12 @@ impl App {
     ///
     /// When `incremental` is false (cold start), clears existing records and fetches. When true,
     /// only fetches transactions newer than the highest confirmed block already in the list.
+    ///
+    /// A history sync completes fully or not at all: if any lookup
+    /// stays unavailable past its retry budget, the thread emits
+    /// [`TxHistoryEvent::Aborted`] and exits, the poller rolls the
+    /// in-memory list back to the last saved snapshot, and a later tick
+    /// starts a fresh sync from current chain state.
     pub(crate) fn fetch_tx_history(&mut self, incremental: bool) {
         if self.accounts.is_empty() || self.tx_history_rx.is_some() {
             return;
@@ -220,6 +248,14 @@ impl App {
         self.tx_history_rx = Some(rx);
 
         std::thread::spawn(move || {
+            // Terminal event for a history sync that cannot finish:
+            // tells the poller to discard this sync's records. A partial
+            // batch must not stand — it would push the watermark past
+            // transactions that were never emitted.
+            let abort = || {
+                let _ = sender.send(Ok(TxHistoryEvent::Aborted));
+            };
+
             // DAO type script code hash for classification.
             let dao_type_hash = format!("{:#x}", ckb_sdk::constants::DAO_TYPE_HASH);
 
@@ -251,10 +287,11 @@ impl App {
             }
 
             // Collect all tx entries across accounts, grouped by tx_hash.
-            // Per-account IO tracking: which accounts have inputs/outputs in each tx.
             struct TxInfo {
                 block_number: u64,
-                input_accounts: HashSet<String>,
+                /// Accounts whose own index query reported an output in this
+                /// tx. Inputs are attributed separately — see the
+                /// input resolution in the classification loop.
                 output_accounts: HashSet<String>,
                 /// First account to encounter this tx (used as primary owner).
                 owner_lock_args: String,
@@ -264,10 +301,11 @@ impl App {
             for lock_args in &all_lock_args {
                 // With group_by_transaction=true, each result is one unique tx.
                 // Paginates through all results; merged and deduped across accounts.
-                // Retries transient indexer failures — we must never skip an
-                // account silently because a dropped page becomes a permanently
-                // missing tx once the watermark advances.
-                let txs = retry_until_ready(
+                // Retries transient indexer failures; if the node stays
+                // unresponsive the whole sync aborts — skipping just this
+                // account would leave a permanently missing tx once the
+                // watermark advances.
+                let Some(txs) = retry_bounded(
                     &format!(
                         "fetch_recent_transactions | lock_args=0x{} | after_block={}",
                         lock_args,
@@ -282,22 +320,25 @@ impl App {
                         )
                         .map(Some)
                     },
-                );
+                ) else {
+                    abort();
+                    return;
+                };
 
                 for tx_entry in txs {
                     let tx_hash = format!("{:#x}", tx_entry.tx_hash());
                     let info = seen.entry(tx_hash).or_insert_with(|| TxInfo {
                         block_number: 0,
-                        input_accounts: HashSet::new(),
                         output_accounts: HashSet::new(),
                         owner_lock_args: lock_args.clone(),
                     });
 
-                    let mut record_io = |cell_type: &ckb_node::CellType| match cell_type {
-                        ckb_node::CellType::Input => {
-                            info.input_accounts.insert(lock_args.clone());
-                        }
-                        ckb_node::CellType::Output => {
+                    // Record outputs only: an account's own query
+                    // authoritatively lists its outputs in any tx it
+                    // reports. Inputs are attributed by resolving the
+                    // tx's own inputs in the classification loop.
+                    let mut record_io = |cell_type: &ckb_node::CellType| {
+                        if matches!(cell_type, ckb_node::CellType::Output) {
                             info.output_accounts.insert(lock_args.clone());
                         }
                     };
@@ -320,6 +361,11 @@ impl App {
             // Cache block headers to avoid redundant RPC calls.
             let mut header_cache: HashMap<ckb_types::H256, u64> = HashMap::new();
 
+            // Cache resolved previous transactions; chained wallet txs
+            // often spend several outputs of the same parent.
+            let mut prev_tx_cache: HashMap<ckb_types::H256, ckb_jsonrpc_types::TransactionView> =
+                HashMap::new();
+
             // Process each unique transaction, sorted newest first.
             let mut tx_list: Vec<(String, TxInfo)> = seen.into_iter().collect();
             tx_list.sort_by_key(|item| Reverse(item.1.block_number));
@@ -328,16 +374,7 @@ impl App {
                 let block_number = tx_info.block_number;
                 let owner_lock_args = tx_info.owner_lock_args;
                 // Use the owner's specific IO role, not a global merge.
-                let has_input = tx_info.input_accounts.contains(&owner_lock_args);
                 let has_output = tx_info.output_accounts.contains(&owner_lock_args);
-
-                // For incoming internal transfers: the sender is a different
-                // wallet account found in the input side.
-                let sender_account: Option<String> = tx_info
-                    .input_accounts
-                    .iter()
-                    .find(|a| a.as_str() != owner_lock_args)
-                    .cloned();
                 let tx_hash_clean = tx_hash_str.strip_prefix("0x").unwrap_or(&tx_hash_str);
                 let tx_hash_bytes = match hex::decode(tx_hash_clean) {
                     Ok(b) if b.len() == 32 => {
@@ -348,45 +385,58 @@ impl App {
                     _ => continue,
                 };
 
-                // Retry until we get a concrete tx_status. The indexer
-                // just handed us this hash; `Ok(None)` means the node hasn't
-                // caught up to its own indexer or is briefly unhappy — retry.
+                // The indexer just handed us this hash; `Ok(None)` means
+                // the node hasn't caught up to its own indexer or is
+                // briefly unhappy. Retry, bounded — if the status never
+                // materializes the sync aborts rather than dropping the tx.
                 let tx_hash_key = tx_hash_bytes.clone();
-                let tx_status = retry_until_ready(
+                let Some(tx_status) = retry_bounded(
                     &format!("get_transaction tx_hash={:#x}", tx_hash_key),
                     || qp_client.get_transaction(tx_hash_bytes.clone()),
-                );
+                ) else {
+                    abort();
+                    return;
+                };
 
                 let is_pending = tx_status.status != "Committed" && tx_status.status != "committed";
 
-                // A committed tx must have a transaction view. If it's missing
-                // we want to retry rather than drop — so re-poll until it lands.
-                // (For pending txs this is valid too: they should at least be
-                // returned by the node.)
+                // A committed tx must have a transaction view. If it's
+                // missing, re-poll — and if it never lands, abort the sync
+                // rather than drop the tx. (For pending txs this is valid
+                // too: they should at least be returned by the node.)
                 let tx_view = match tx_status.transaction {
                     Some(tv) => tv,
-                    None => retry_until_ready(
-                        &format!("get_transaction.tx_view tx_hash={:#x}", tx_hash_key),
-                        || {
-                            qp_client
-                                .get_transaction(tx_hash_bytes.clone())
-                                .map(|opt| opt.and_then(|s| s.transaction))
-                        },
-                    ),
+                    None => {
+                        let Some(tv) = retry_bounded(
+                            &format!("get_transaction.tx_view tx_hash={:#x}", tx_hash_key),
+                            || {
+                                qp_client
+                                    .get_transaction(tx_hash_bytes.clone())
+                                    .map(|opt| opt.and_then(|s| s.transaction))
+                            },
+                        ) else {
+                            abort();
+                            return;
+                        };
+                        tv
+                    }
                 };
 
-                // Determine timestamp from block header. Retry until the
-                // header resolves — we need a stable timestamp to avoid
-                // rewriting the stored record on the next tick.
+                // Determine timestamp from block header. Retry the header
+                // lookup — we need a stable timestamp to avoid rewriting
+                // the stored record on the next tick.
                 let timestamp = if let Some(ref bh) = tx_status.block_hash {
                     if let Some(&cached) = header_cache.get(bh) {
                         cached
                     } else {
                         let bh_clone = bh.clone();
-                        let header = retry_until_ready(
+                        let Some(header) = retry_bounded(
                             &format!("get_header block_hash={:#x}", bh_clone),
                             || qp_client.get_header(bh_clone.clone()),
-                        );
+                        ) else {
+                            abort();
+                            return;
+                        };
                         // CKB header timestamp is in milliseconds.
                         let ts = header.inner.timestamp.value() / 1000;
                         header_cache.insert(bh.clone(), ts);
@@ -395,6 +445,67 @@ impl App {
                 } else {
                     0
                 };
+
+                // Which wallet accounts funded this tx. Each input names
+                // the exact output it spends, so resolving those previous
+                // outputs answers "who sent" from the transaction itself.
+                // The per-script index can't answer this: on the light
+                // client every registered script syncs on its own cursor,
+                // so a sibling account's input may not be indexed yet —
+                // and a record freezes once the watermark passes it, so
+                // attribution must be right the first time it's written.
+                let mut input_accounts: HashSet<String> = HashSet::new();
+                for input in &tx_view.inner.inputs {
+                    let prev = &input.previous_output;
+                    // Cellbase txs spend the null out-point; there is no
+                    // previous output to resolve.
+                    if prev.tx_hash == ckb_types::H256::default() {
+                        continue;
+                    }
+                    if !prev_tx_cache.contains_key(&prev.tx_hash) {
+                        let prev_hash = prev.tx_hash.clone();
+                        let Some(view) = retry_bounded(
+                            &format!("resolve_input prev_tx={:#x}", prev_hash),
+                            || {
+                                qp_client
+                                    .get_or_fetch_transaction(prev_hash.clone())
+                                    .map(|opt| opt.and_then(|s| s.transaction))
+                            },
+                        ) else {
+                            abort();
+                            return;
+                        };
+                        prev_tx_cache.insert(prev.tx_hash.clone(), view);
+                    }
+                    let prev_tx_view = &prev_tx_cache[&prev.tx_hash];
+                    match prev_tx_view.inner.outputs.get(prev.index.value() as usize) {
+                        Some(out) => {
+                            if let Some(args) =
+                                wallet_lock_args(out, wallet_code_hash, &all_lock_args_set)
+                            {
+                                input_accounts.insert(args);
+                            }
+                        }
+                        None => {
+                            // A committed tx cannot reference a missing
+                            // output; reaching this means corrupt node data.
+                            tracing::warn!(
+                                "tx history: prev output {:#x}:{} not found while resolving inputs of {}",
+                                prev.tx_hash,
+                                prev.index.value(),
+                                tx_hash_str,
+                            );
+                        }
+                    }
+                }
+                let has_input = input_accounts.contains(&owner_lock_args);
+
+                // For incoming internal transfers: the sender is a different
+                // wallet account found in the input side.
+                let sender_account: Option<String> = input_accounts
+                    .iter()
+                    .find(|a| a.as_str() != owner_lock_args)
+                    .cloned();
 
                 // Check for DAO type script in outputs.
                 let has_dao_output = tx_view.inner.outputs.iter().any(|out| {

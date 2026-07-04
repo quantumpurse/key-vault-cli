@@ -320,6 +320,38 @@ impl QpClient {
         self.unified_client.get_transaction(hash)
     }
 
+    /// Retrieves a transaction like [`Self::get_transaction`], and
+    /// additionally pulls it from the P2P network when the light client
+    /// doesn't hold it locally.
+    ///
+    /// The light client only stores transactions that matched a
+    /// registered script or were explicitly fetched, so an arbitrary
+    /// transaction (e.g. the previous output spent by an external
+    /// input) needs a `fetch_transaction` round trip to peers first.
+    /// That fetch is asynchronous: this returns `Ok(None)` whenever no
+    /// transaction view is available yet — call again until it lands in
+    /// the store. A full node holds every committed transaction locally,
+    /// so there is never a fetch to kick off.
+    pub fn get_or_fetch_transaction(
+        &self,
+        hash: H256,
+    ) -> Result<Option<TransactionStatus>, NodeManagerError> {
+        if let Some(status) = self.unified_client.get_transaction(hash.clone())? {
+            if status.transaction.is_some() {
+                return Ok(Some(status));
+            }
+        }
+
+        // Not in the local store. The light client can pull it from
+        // peers; once fetched it becomes visible to `get_transaction`
+        // above. A full node either has a transaction or it doesn't —
+        // there is nothing to kick off.
+        if let Some(light) = self.unified_client.as_any().downcast_ref::<LightClient>() {
+            light.fetch_transaction(hash)?;
+        }
+        Ok(None)
+    }
+
     /// Collects live cells matching `options`, using whichever strategy the
     /// active backend prefers (see [`UnifiedClient::collect_cells`]).
     pub fn collect_cells(
