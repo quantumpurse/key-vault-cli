@@ -4,7 +4,6 @@ use crate::config::{NetworkType, NodeConfig, NodeType};
 use crate::error::NodeManagerError;
 use crate::wallet_helpers::utils::build_qr_lock_script;
 use ckb_sdk::rpc::ckb_indexer::{Order, ScriptType, SearchKey};
-use ckb_sdk::rpc::CkbRpcClient;
 
 /// Builds the adoption series for the Quantum Resistant lock script:
 /// cumulative capacity of currently-live cells bucketed by creation
@@ -36,7 +35,7 @@ pub fn fetch_qr_adoption_series(
     const INTERVAL_WINDOW: u64 = 100_000;
 
     let url = NodeConfig::default_rpc_url_for(NodeType::PublicRpc, network);
-    let rpc = CkbRpcClient::new(url);
+    let rpc = crate::client::timed_ckb_rpc_client(url);
 
     let tip = rpc
         .get_tip_header()

@@ -168,7 +168,7 @@ impl App {
         std::thread::spawn(move || {
             let public_rpc_url =
                 ckb_node::NodeConfig::default_rpc_url_for(ckb_node::NodeType::PublicRpc, network);
-            let rpc = ckb_sdk::CkbRpcClient::new(public_rpc_url);
+            let rpc = ckb_node::client::timed_ckb_rpc_client(public_rpc_url);
 
             let mut result = HashMap::new();
             for block_number in missing {
@@ -681,7 +681,7 @@ impl App {
                         ckb_node::NodeType::PublicRpc,
                         network,
                     );
-                    let rpc = ckb_sdk::CkbRpcClient::new(public_rpc_url);
+                    let rpc = ckb_node::client::timed_ckb_rpc_client(public_rpc_url);
                     match rpc.get_header_by_number(target.into()) {
                         Ok(Some(h)) => Some(h.into()),
                         Ok(None) => {

@@ -1,24 +1,23 @@
-//! UnifiedClient layer — protocol speakers + the App-facing handle.
+//! Everything the wallet uses to talk to a CKB node.
 //!
-//! The crate's "talk-to-a-node" surface lives here, at three honest
-//! levels of abstraction:
+//! Contents, bottom layer first:
 //!
-//! - [`UnifiedClient`] — the trait describing what wallet code needs from any
-//!   backend. Concrete impls are in submodules; consumers pass them
-//!   around as `&dyn UnifiedClient` or `Arc<dyn UnifiedClient>`.
-//! - [`FullNodeClient`] / [`LightClient`] — concrete backends. Wrap
-//!   the upstream `ckb_sdk::CkbRpcClient` and
-//!   `ckb_sdk::LightClientRpcClient` respectively, normalize their
-//!   return shapes, and expose a few backend-specific methods (peer
-//!   count, light-client filter scripts, etc.) that callers can reach
-//!   via `as_any().downcast_ref::<…>()`.
-//! - [`QpClient`] — the cloneable handle the App holds. Bundles
-//!   `Arc<dyn UnifiedClient>` with the `NodeConfig` snapshot it was built
-//!   from, so background threads carry one cheap clone instead of
-//!   capturing the rpc and a fistful of config scalars separately.
-//!
-//! Plus free helpers — [`synced_block`], etc. — that consult a
-//! `&dyn UnifiedClient` without caring which concrete impl is behind it.
+//! - [`RPC_TIMEOUT`] and the `*_rpc_client` constructors — the only
+//!   approved way to build an HTTP client in this crate. They exist to
+//!   guarantee every RPC call has a timeout; ckb-sdk's own `new`
+//!   constructors have none, and an untimed call can block its thread
+//!   for as long as a broken node stays silent.
+//! - [`UnifiedClient`] — the internal trait listing the node
+//!   operations wallet code needs. Each backend implements it in its
+//!   own submodule.
+//! - [`FullNodeClient`] / [`LightClient`] — the two backend
+//!   implementations. They wrap ckb-sdk's RPC clients, normalize the
+//!   backends' different return shapes, and add a few backend-specific
+//!   methods reachable via `as_any().downcast_ref::<…>()`.
+//! - [`QpClient`] — the handle application code actually holds and
+//!   clones. See its doc for the cloning and backend-switch rules.
+//! - Free helpers ([`synced_block`], etc.) that answer questions any
+//!   backend can be asked.
 
 use std::any::Any;
 use std::sync::Arc;
@@ -38,6 +37,48 @@ mod light;
 
 pub use full::FullNodeClient;
 pub(crate) use light::LightClient;
+
+/// Total-request timeout for every JSON-RPC call.
+///
+/// ckb-sdk's default HTTP client has no timeout, so a node that accepts
+/// a connection but never responds blocks the calling thread
+/// indefinitely — wedging any single-flight poller waiting on it. Every
+/// RPC client in this workspace must be built through the constructors
+/// below (or, for ckb-sdk helper types that embed their own clients,
+/// have this timeout injected at their construction site) so this bound
+/// applies.
+///
+/// Known exception: the `LightClient*` tx-building helpers
+/// (`light.rs`) expose no constructor or field through which a timeout
+/// can be injected — see `BACKLOG.md` ("ckb-sdk RPC timeout").
+pub const RPC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Builds a full-node / indexer RPC client with [`RPC_TIMEOUT`] applied.
+///
+/// Panics on a malformed URL, matching `CkbRpcClient::new`'s behavior.
+pub fn timed_ckb_rpc_client(url: &str) -> ckb_sdk::CkbRpcClient {
+    ckb_sdk::CkbRpcClient::with_builder(url, |b| b.timeout(RPC_TIMEOUT))
+        .expect("ckb rpc url, e.g. \"http://127.0.0.1:8114\"")
+}
+
+/// Builds a light-client RPC client with [`RPC_TIMEOUT`] applied.
+///
+/// Panics on a malformed URL, matching `LightClientRpcClient::new`'s
+/// behavior.
+pub(crate) fn timed_light_rpc_client(url: &str) -> ckb_sdk::rpc::ckb_light_client::LightClientRpcClient {
+    ckb_sdk::rpc::ckb_light_client::LightClientRpcClient::with_builder(url, |b| {
+        b.timeout(RPC_TIMEOUT)
+    })
+    .expect("light client rpc url, e.g. \"http://127.0.0.1:9000\"")
+}
+
+/// Builds an async full-node RPC client with [`RPC_TIMEOUT`] applied —
+/// for injecting into ckb-sdk `Default*` helpers, whose plain
+/// constructors embed their own untimed clients.
+pub(crate) fn timed_ckb_async_rpc_client(url: &str) -> ckb_sdk::rpc::CkbRpcAsyncClient {
+    ckb_sdk::rpc::CkbRpcAsyncClient::with_builder(url, |b| b.timeout(RPC_TIMEOUT))
+        .expect("ckb rpc url, e.g. \"http://127.0.0.1:8114\"")
+}
 
 /// Unified RPC interface for wallet operations.
 ///
@@ -135,21 +176,27 @@ pub struct TransactionStatus {
     pub block_hash: Option<H256>,
 }
 
-/// Cloneable handle to the active CKB backend.
+/// The wallet's handle to the active CKB node. This is the type
+/// application code holds and passes around to make RPC calls.
 ///
-/// Bundles the protocol speaker (`Arc<dyn UnifiedClient>`) with the
-/// `NodeConfig` snapshot it was built from. This is the unit that
-/// background threads carry: one cheap clone gives them the rpc client
-/// plus the backend-shape knowledge (`network`, `node_type`,
-/// `is_mainnet`) they need to call `wallet_helpers::*` correctly without
-/// having to consult any single-owner state.
+/// It pairs the connection (`Arc<dyn UnifiedClient>` — full node,
+/// light client, or public RPC) with a copy of the `NodeConfig` it was
+/// built from, so any holder can both query the chain and ask which
+/// network and backend it is talking to (`network()`, `is_mainnet()`,
+/// `config()`).
 ///
-/// Lifecycle: replaced wholesale on backend switch — `App` builds a new
-/// `QpClient` from the new config, stores it, and lets the old one
-/// drop when its last in-flight thread finishes its work. The trait
-/// object behind the `Arc` keeps speaking to the old backend until it
-/// does; this is intentional, and the only correct way to retire an
-/// HTTP client that may be mid-request.
+/// Cloning is cheap and every clone talks to the same backend, so
+/// background threads take their own clone instead of sharing state
+/// with the UI thread.
+///
+/// Switching backends never mutates an existing `QpClient`. The app
+/// builds a new one from the new config and drops its old handle;
+/// threads still holding old clones keep talking to the old backend
+/// until they finish their current work, and the last drop closes the
+/// connection. An in-flight HTTP request cannot be cancelled from the
+/// outside, so letting it finish is the only clean way to retire a
+/// client — and because every call is bounded by [`RPC_TIMEOUT`],
+/// retirement takes at most one request's worth of time.
 #[derive(Clone)]
 pub struct QpClient {
     unified_client: Arc<dyn UnifiedClient>,

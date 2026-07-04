@@ -549,19 +549,15 @@ impl eframe::App for App {
             self.fetch_dao_cells();
             self.fetch_node_status();
 
-            // Adoption series rebuild, on its own schedule.
+            // Adoption series rebuild, on its own schedule. Every RPC
+            // call is bounded by ckb-node's `RPC_TIMEOUT`, so an
+            // in-flight fetch always finishes on its own;
+            // `fetch_qr_adoption`'s guard lets a scan that overruns
+            // the schedule run to completion instead of restarting it.
             if self
                 .qr_adoption_next_fetch
                 .is_none_or(|t| std::time::Instant::now() >= t)
             {
-                // A fetch still in flight past its whole schedule means
-                // the connection hung (the sync RPC client has no
-                // timeout) — abandon it rather than freeze the series
-                // for the session.
-                if self.qr_adoption_rx.is_some() {
-                    tracing::warn!("qr adoption: abandoning stalled fetch");
-                    self.qr_adoption_rx = None;
-                }
                 self.fetch_qr_adoption();
             }
         }

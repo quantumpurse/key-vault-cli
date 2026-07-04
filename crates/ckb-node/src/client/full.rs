@@ -33,9 +33,17 @@ pub struct FullNodeClient {
 impl FullNodeClient {
     pub fn new(rpc_url: &str) -> Self {
         Self {
-            client: CkbRpcClient::new(rpc_url),
+            client: super::timed_ckb_rpc_client(rpc_url),
             rpc_url: rpc_url.to_string(),
         }
+    }
+
+    /// Builds ckb-sdk's cell collector with [`super::RPC_TIMEOUT`]
+    /// applied. `DefaultCellCollector::new` would embed its own untimed
+    /// clients — never use it directly.
+    fn timed_cell_collector(&self) -> DefaultCellCollector {
+        DefaultCellCollector::new_with_timeout(&self.rpc_url, super::RPC_TIMEOUT)
+            .expect("ckb rpc url, e.g. \"http://127.0.0.1:8114\"")
     }
 
     /// Light-client utility: best-effort discovery of the earliest
@@ -235,7 +243,7 @@ impl UnifiedClient for FullNodeClient {
     }
 
     fn collect_cells(&self, query: &CellQueryOptions) -> Result<Vec<LiveCell>, NodeManagerError> {
-        let mut collector = DefaultCellCollector::new(&self.rpc_url);
+        let mut collector = self.timed_cell_collector();
         let (cells, _) = collector
             .collect_live_cells(query, false)
             .map_err(|e| NodeManagerError::RpcError(e.to_string()))?;
@@ -243,15 +251,26 @@ impl UnifiedClient for FullNodeClient {
     }
 
     fn cell_collector(&self) -> Box<dyn CellCollector> {
-        Box::new(DefaultCellCollector::new(&self.rpc_url))
+        Box::new(self.timed_cell_collector())
     }
 
     fn header_dep_resolver(&self) -> Box<dyn HeaderDepResolver> {
-        Box::new(DefaultHeaderDepResolver::new(&self.rpc_url))
+        // Upstream has no timeout constructor for this type; its only
+        // field is public, so inject the timed client directly.
+        Box::new(DefaultHeaderDepResolver {
+            ckb_client: super::timed_ckb_async_rpc_client(&self.rpc_url),
+        })
     }
 
     fn tx_dep_provider(&self) -> Box<dyn TransactionDependencyProvider> {
-        Box::new(DefaultTransactionDependencyProvider::new(&self.rpc_url, 10))
+        // Upstream has no timeout constructor for this type and its
+        // inner state is private, so swap the public `rpc_client` for a
+        // timed one after construction. `blocking_lock` is safe here —
+        // wallet code calls this from plain threads, never from inside
+        // an async runtime.
+        let provider = DefaultTransactionDependencyProvider::new(&self.rpc_url, 10);
+        provider.inner.blocking_lock().rpc_client = super::timed_ckb_async_rpc_client(&self.rpc_url);
+        Box::new(provider)
     }
 
     fn local_node_info(&self) -> Result<ckb_jsonrpc_types::LocalNode, NodeManagerError> {

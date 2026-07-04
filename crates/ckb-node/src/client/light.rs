@@ -40,7 +40,7 @@ pub(crate) struct LightClient {
 impl LightClient {
     pub fn new(rpc_url: &str) -> Self {
         Self {
-            client: LightClientRpcClient::new(rpc_url),
+            client: super::timed_light_rpc_client(rpc_url),
             rpc_url: rpc_url.to_string(),
         }
     }

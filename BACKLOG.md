@@ -22,6 +22,24 @@
 - [ ] **Implement re-validation before signing.** Add a validation step between transaction build and SPHINCS+ signing to verify inputs are still live and transaction parameters match user intent — guards against TOCTOU races between build and sign.
 - [ ] **Patch `pinentry` crate's `BufReader` so its scratch buffer zeroizes on drop.** In `pinentry-0.8.0/src/assuan.rs`, `Connection::input` is a `BufReader<ChildStdout>` (line 50) whose internal `Vec<u8>` receives the password bytes via `read_line` (line 142). The crate explicitly zeroizes every other plaintext copy (the `line` String, the `DataLine` `SecretString`, the percent-decoded `Cow`, the concat buffer), but `BufReader` has no zeroizing `Drop`, and `Connection`'s `Drop` impl (lines 190–205) doesn't reach in to scrub it. Net: one freed-but-not-zeroed page per password prompt — readable from freed-memory snapshots until the allocator reuses it. Fix paths: (1) upstream PR to `str4d/pinentry-rs` adding a zeroizing reader newtype around `BufReader` (preferred — benefits every consumer), or (2) fork the crate into `vendor/` and apply the patch with a path dep. Today's leak is ~1 fragment per prompt vs egui's ~5+, so accepted; revisit if we move to higher-frequency password prompts.
 
+## Upstream
+
+- [ ] **ckb-sdk RPC timeout.** ckb-sdk's plain client constructors build
+  HTTP clients with no timeout (`reqwest::Client::new()`), so a node that
+  accepts a connection but never responds blocks the calling thread
+  indefinitely. We inject `ckb_node::client::RPC_TIMEOUT` everywhere the
+  SDK allows (`with_builder`, `DefaultCellCollector::new_with_timeout`,
+  public client fields), but the three `LightClient*` tx-building helpers
+  (`light_client_impls.rs`) have private fields and no timeout
+  constructor, so LC-backend transaction building still makes untimed
+  calls. Fix path: upstream PR to `nervosnetwork/ckb-sdk-rust` adding
+  `new_with_timeout` to those helpers (precedent: `DefaultCellCollector`
+  already has one, and the SDK itself injects timeouts internally in
+  `default_impls.rs:337`); `with_builder` is also undocumented there —
+  worth a doc PR alongside. Interim: risk accepted — tx building is
+  user-initiated and visible, unlike the silent poller wedge this
+  timeout work fixed.
+
 ## Chain / Sync
 
 - [ ] **Reorg handling for tx history.** `tx_history.json` currently freezes records once their block is below the watermark. CKB reorgs (rare) would leave stale records in the store. Maintain a mutable "reorg window" of the last ~24 blocks: re-fetch on each tick, reconcile pending↔committed, remove records whose hash is no longer on chain. Below the window, finalize.
