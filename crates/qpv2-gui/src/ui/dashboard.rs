@@ -262,8 +262,9 @@ impl App {
     ///
     /// Returns `(line_points, tx_points)`: the line connects the
     /// balance after each transaction with straight segments (matching
-    /// the TVL chart's look), from the first known transaction to the
-    /// live total. `tx_points` holds one
+    /// the TVL chart's look), from a pre-history anchor (the balance
+    /// before the first transaction, ~0 for a wallet funded within the
+    /// synced window) to the live total. `tx_points` holds one
     /// entry per balance-changing transaction for dot markers; event
     /// timestamps are fixed, so dots never drift between repaints.
     fn balance_history(&self, current_total: u64, now: u64) -> (Series, Series) {
@@ -313,11 +314,17 @@ impl App {
             tx_points.push(after);
             bal -= delta;
         }
-        // Deliberately no pre-history anchor point: it is ~0 for any
-        // wallet whose funding is inside the synced window, and a 0 in
-        // the series pins the y-axis to zero — flattening the real
-        // balance detail into the top few pixels. The line starts at
-        // the first known transaction instead.
+        // Pre-history anchor: the balance just before the first
+        // external transaction (~0 for a wallet funded within the
+        // synced window), at that same instant — so the first deposit
+        // draws as a vertical wall rising from the baseline. Keeping
+        // ~0 in the series pins the y-axis to it: the chart reads in
+        // absolute terms, every movement's height being its share of
+        // the peak balance. Activity small relative to the total
+        // renders correspondingly small — scale over magnification.
+        if let Some(&(first_ts, _)) = merged.first() {
+            points.push((first_ts, bal.max(0) as u64));
+        }
         points.reverse();
         tx_points.reverse();
         (points, tx_points)
