@@ -161,11 +161,11 @@ impl App {
                     // repaints.
                     let now = crate::utils::unix_now_secs();
                     let key = (self.tx_history.len(), total_shannons, now / 10);
-                    if self.balance_chart_cache.as_ref().map(|(k, _, _)| *k) != Some(key) {
-                        let (h, d) = self.balance_history(total_shannons, now);
-                        self.balance_chart_cache = Some((key, h, d));
+                    if self.balance_chart_cache.as_ref().map(|(k, _)| *k) != Some(key) {
+                        let history = self.balance_history(total_shannons, now);
+                        self.balance_chart_cache = Some((key, history));
                     }
-                    let (_, history, _) = self.balance_chart_cache.as_ref().expect("set above");
+                    let (_, history) = self.balance_chart_cache.as_ref().expect("set above");
                     draw_trend_chart(
                         ui,
                         &self.colors,
@@ -256,18 +256,16 @@ impl App {
     }
 
     /// Reconstructs the wallet's full balance history by replaying the
-    /// transaction tape backwards from the live total. Internal
-    /// transfers and DAO operations are (fees aside) net-zero to the
-    /// wallet total and produce no step.
+    /// transaction tape backwards from the live total. Self transfers
+    /// and DAO operations are (fees aside) net-zero to the wallet
+    /// total and produce no step.
     ///
-    /// Returns `(line_points, tx_points)`: the line connects the
-    /// balance after each transaction with straight segments (matching
-    /// the TVL chart's look), from a pre-history anchor (the balance
-    /// before the first transaction, ~0 for a wallet funded within the
-    /// synced window) to the live total. `tx_points` holds one
-    /// entry per balance-changing transaction for dot markers; event
-    /// timestamps are fixed, so dots never drift between repaints.
-    fn balance_history(&self, current_total: u64, now: u64) -> (Series, Series) {
+    /// The line connects the balance after each transaction with
+    /// straight segments (matching the TVL chart's look), from a
+    /// pre-history anchor (the balance before the first transaction,
+    /// ~0 for a wallet funded within the synced window) to the live
+    /// total.
+    fn balance_history(&self, current_total: u64, now: u64) -> Series {
         // Clamp event times below `now`: block headers may run ahead
         // of the local clock (consensus allows ~15s), and the series is
         // headed by the (now, total) anchor — a later event would make
@@ -275,7 +273,7 @@ impl App {
         let mut events: Vec<(u64, i128)> = self
             .tx_history
             .iter()
-            .filter(|r| r.timestamp > 0 && r.internal_counterparty_lock_args.is_none())
+            .filter(|r| r.timestamp > 0)
             .filter_map(|r| {
                 let ts = r.timestamp.min(now.saturating_sub(1));
                 match r.tx_kind {
@@ -286,7 +284,7 @@ impl App {
             })
             .collect();
         if events.is_empty() {
-            return (Vec::new(), Vec::new());
+            return Vec::new();
         }
         events.sort_by_key(|&(ts, _)| ts);
 
@@ -306,12 +304,9 @@ impl App {
         // balance right after its transaction, plus the live total as
         // the head.
         let mut points: Vec<(u64, u64)> = vec![(now, current_total)];
-        let mut tx_points: Vec<(u64, u64)> = Vec::new();
         let mut bal = current_total as i128;
         for &(ts, delta) in merged.iter().rev() {
-            let after = (ts, bal.max(0) as u64);
-            points.push(after);
-            tx_points.push(after);
+            points.push((ts, bal.max(0) as u64));
             bal -= delta;
         }
         // Pre-history anchor: the balance just before the first
@@ -326,8 +321,7 @@ impl App {
             points.push((first_ts, bal.max(0) as u64));
         }
         points.reverse();
-        tx_points.reverse();
-        (points, tx_points)
+        points
     }
 
     /// One row of equal-width module shortcuts.
@@ -505,10 +499,12 @@ fn draw_tape_row(
         colors.text_muted,
     );
 
-    // TYPE badge: short codes, semantic color.
+    // TYPE badge: short codes, semantic color. Self transfers are
+    // neutral — money moved between our own accounts, not in or out.
     let (code, code_color) = match record.tx_kind {
         TxKind::Incoming => ("IN", colors.accent2),
         TxKind::Outgoing => ("OUT", colors.danger),
+        TxKind::SelfTransfer => ("SELF", colors.text_muted),
         TxKind::DaoDeposit => ("DEP", colors.accent),
         TxKind::DaoPrepare => ("WD", colors.accent),
         TxKind::DaoWithdraw => ("UNLK", colors.accent),
@@ -553,16 +549,11 @@ fn draw_tape_row(
     }
 
     // AMOUNT: signed integer part in semantic color, fraction dim.
-    // Internal transfers are neutral — money moved between our own
-    // accounts, not in or out.
-    let is_internal = counterparty_index.is_some();
-    let (prefix, amount_color) = if is_internal {
-        ("", colors.text)
-    } else {
-        match record.tx_kind {
-            TxKind::Incoming => ("+", colors.accent2),
-            _ => ("\u{2212}", colors.danger),
-        }
+    // Self transfers are unsigned: the wallet total is unchanged.
+    let (prefix, amount_color) = match record.tx_kind {
+        TxKind::SelfTransfer => ("", colors.text),
+        TxKind::Incoming => ("+", colors.accent2),
+        _ => ("\u{2212}", colors.danger),
     };
     let (int, frac) = ckb_split(record.amount);
     let int_rect = painter.text(

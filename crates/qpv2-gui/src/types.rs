@@ -22,9 +22,9 @@ pub(crate) type Series = Vec<SeriesPoint>;
 pub(crate) type QrAdoptionUpdate = Result<Series, String>;
 
 /// Memoized dashboard balance chart: `((tx_count, live_total, 10s_bucket),
-/// line_points, dot_points)`. Rebuilding from the whole tape every frame is
+/// line_points)`. Rebuilding from the whole tape every frame is
 /// wasted work, so the result is cached under the key tuple.
-pub(crate) type BalanceChartCache = ((usize, u64, u64), Series, Series);
+pub(crate) type BalanceChartCache = ((usize, u64, u64), Series);
 
 /// Identifies which transaction flow owns a shared background operation,
 /// down to the specific DAO operation so mid-flight UI (e.g. the
@@ -83,6 +83,8 @@ pub(crate) enum DaoQueryEvent {
 pub(crate) enum TxKind {
     Incoming,
     Outgoing,
+    /// Capacity moved strictly between this wallet's accounts.
+    SelfTransfer,
     DaoDeposit,
     DaoPrepare,
     DaoWithdraw,
@@ -101,7 +103,9 @@ pub(crate) struct TxRecord {
     pub is_pending: bool,
     /// Lock args of the wallet account that owns this transaction.
     pub owner_lock_args: String,
-    /// For internal transfers: lock args of the other wallet account involved.
+    /// The other wallet account involved, when there is one: the
+    /// receiver of a `SelfTransfer`, the in-wallet leg of a mixed
+    /// payment, or the sending sibling account of an `Incoming`.
     pub internal_counterparty_lock_args: Option<String>,
     /// For Outgoing to external addresses: the first external recipient's full
     /// bech32m address. Used to build the Address Book in the Transfer tab.

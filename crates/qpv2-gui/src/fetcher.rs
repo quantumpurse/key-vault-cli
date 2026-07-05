@@ -287,13 +287,14 @@ impl App {
             }
 
             // Collect all tx entries across accounts, grouped by tx_hash.
+            // Discovery only: everything a record states (kind, owner,
+            // counterparty, amount) is derived from the transaction
+            // itself in the classification loop.
             struct TxInfo {
                 block_number: u64,
-                /// Accounts whose own index query reported an output in this
-                /// tx. Inputs are attributed separately — see the
-                /// input resolution in the classification loop.
-                output_accounts: HashSet<String>,
-                /// First account to encounter this tx (used as primary owner).
+                /// First account to encounter this tx. Owns the record's
+                /// perspective for kinds the wallet didn't fund; funded
+                /// kinds are re-normalized to the sender.
                 owner_lock_args: String,
             }
             let mut seen: HashMap<String, TxInfo> = HashMap::new();
@@ -329,30 +330,15 @@ impl App {
                     let tx_hash = format!("{:#x}", tx_entry.tx_hash());
                     let info = seen.entry(tx_hash).or_insert_with(|| TxInfo {
                         block_number: 0,
-                        output_accounts: HashSet::new(),
                         owner_lock_args: lock_args.clone(),
                     });
-
-                    // Record outputs only: an account's own query
-                    // authoritatively lists its outputs in any tx it
-                    // reports. Inputs are attributed by resolving the
-                    // tx's own inputs in the classification loop.
-                    let mut record_io = |cell_type: &ckb_node::CellType| {
-                        if matches!(cell_type, ckb_node::CellType::Output) {
-                            info.output_accounts.insert(lock_args.clone());
-                        }
-                    };
 
                     match tx_entry {
                         ckb_node::Tx::Grouped(ref grouped) => {
                             info.block_number = grouped.block_number.value();
-                            for (cell_type, _idx) in &grouped.cells {
-                                record_io(cell_type);
-                            }
                         }
                         ckb_node::Tx::Ungrouped(ref cell) => {
                             info.block_number = cell.block_number.value();
-                            record_io(&cell.io_type);
                         }
                     }
                 }
@@ -373,8 +359,6 @@ impl App {
             for (tx_hash_str, tx_info) in tx_list {
                 let block_number = tx_info.block_number;
                 let owner_lock_args = tx_info.owner_lock_args;
-                // Use the owner's specific IO role, not a global merge.
-                let has_output = tx_info.output_accounts.contains(&owner_lock_args);
                 let tx_hash_clean = tx_hash_str.strip_prefix("0x").unwrap_or(&tx_hash_str);
                 let tx_hash_bytes = match hex::decode(tx_hash_clean) {
                     Ok(b) if b.len() == 32 => {
@@ -498,13 +482,13 @@ impl App {
                         }
                     }
                 }
-                let has_input = input_accounts.contains(&owner_lock_args);
-
-                // For incoming internal transfers: the sender is a different
-                // wallet account found in the input side.
-                let sender_account: Option<String> = input_accounts
+                // The wallet-side sender, when the wallet funded this tx:
+                // the lowest-indexed account on the input side. `None`
+                // means no wallet account contributed an input — the tx
+                // is money arriving from outside.
+                let wallet_sender = all_lock_args
                     .iter()
-                    .find(|a| a.as_str() != owner_lock_args)
+                    .find(|a| input_accounts.contains(*a))
                     .cloned();
 
                 // Check for DAO type script in outputs.
@@ -536,36 +520,17 @@ impl App {
                     dep.out_point.index.value() == 2
                 });
 
-                let tx_kind = if has_dao_output && dao_output_data_is_zero {
-                    TxKind::DaoDeposit
-                } else if has_dao_output {
-                    TxKind::DaoPrepare
-                } else if has_dao_cell_dep && has_input && !has_dao_output {
-                    TxKind::DaoWithdraw
-                } else if has_output && !has_input {
-                    TxKind::Incoming
-                } else {
-                    TxKind::Outgoing
-                };
-
-                // Classify each output: owner's capacity (incl. change), other
-                // wallet accounts' capacity, and external capacity.
-                let mut owner_capacity: u64 = 0;
-                let mut internal_counterparty: Option<String> = None;
-                let mut internal_capacity: u64 = 0;
+                // Those ouputs that are locked with any of this wallet's lock_args
+                let mut wallet_out: HashMap<String, u64> = HashMap::new();
+                // Total capacity of outputs locked with none of this wallet's lock_args
                 let mut external_capacity: u64 = 0;
                 let mut external_recipient: Option<String> = None;
 
                 for out in &tx_view.inner.outputs {
                     let cap = out.capacity.value();
                     match wallet_lock_args(out, wallet_code_hash, &all_lock_args_set) {
-                        Some(args) if args == owner_lock_args => {
-                            owner_capacity += cap;
-                        }
                         Some(args) => {
-                            // Output goes to a different wallet account.
-                            internal_counterparty = Some(args);
-                            internal_capacity += cap;
+                            *wallet_out.entry(args).or_insert(0) += cap;
                         }
                         None => {
                             external_capacity += cap;
@@ -586,20 +551,85 @@ impl App {
                     }
                 }
 
-                let amount = match tx_kind {
-                    TxKind::Incoming => owner_capacity,
-                    TxKind::Outgoing => {
-                        // Prefer external send amount; for internal transfers
-                        // use the amount sent to the other wallet account.
-                        if external_capacity > 0 {
-                            external_capacity
+                // Classification is deterministic — derived entirely
+                // from the transaction, never from which account's index
+                // discovered it. DAO shapes first; then: the wallet
+                // funded the tx and nothing left the wallet → self
+                // transfer; the wallet funded nothing → money arriving
+                // from outside; otherwise money leaving the wallet.
+                let tx_kind = if has_dao_output && dao_output_data_is_zero {
+                    TxKind::DaoDeposit
+                } else if has_dao_output {
+                    TxKind::DaoPrepare
+                } else if has_dao_cell_dep && wallet_sender.is_some() && !has_dao_output {
+                    TxKind::DaoWithdraw
+                } else if wallet_sender.is_some() && external_capacity == 0 {
+                    TxKind::SelfTransfer
+                } else if wallet_sender.is_none() {
+                    TxKind::Incoming
+                } else {
+                    TxKind::Outgoing
+                };
+
+                // Per-kind owner, counterparty, and amount. Self
+                // transfers and outgoing payments are normalized to the
+                // sender's perspective — owner is the sending account,
+                // counterparty the receiving one — so direction reads
+                // owner → counterparty regardless of which account's
+                // index discovered the tx.
+                let owner_capacity = wallet_out.get(&owner_lock_args).copied().unwrap_or(0);
+                let (owner_lock_args, internal_counterparty_lock_args, amount) = match tx_kind {
+                    TxKind::SelfTransfer => {
+                        let sender = wallet_sender
+                            .expect("SelfTransfer classification requires a wallet input");
+                        // First receiving account in wallet order; the
+                        // amount sums every non-sender account's outputs.
+                        let received: u64 = wallet_out
+                            .iter()
+                            .filter(|(a, _)| **a != sender)
+                            .map(|(_, c)| *c)
+                            .sum();
+                        let receiver = all_lock_args
+                            .iter()
+                            .find(|a| **a != sender && wallet_out.contains_key(*a))
+                            .cloned();
+                        let amount = if received > 0 {
+                            received
                         } else {
-                            internal_capacity
-                        }
+                            // Same-account transfer: payment and change
+                            // both return to the sender, so ownership
+                            // alone can't recover the intended amount.
+                            // CKB builders place payment outputs before
+                            // the change cell — the first output's
+                            // capacity is the payment.
+                            tx_view
+                                .inner
+                                .outputs
+                                .first()
+                                .map(|out| out.capacity.value())
+                                .unwrap_or(0)
+                        };
+                        (sender, receiver, amount)
+                    }
+                    // No wallet inputs: money from outside, owned by the
+                    // account that discovered it.
+                    TxKind::Incoming => (owner_lock_args, None, owner_capacity),
+                    TxKind::Outgoing => {
+                        // Money left the wallet (a pure in-wallet move is
+                        // SelfTransfer). Normalized to the sender's
+                        // perspective like SelfTransfer; a counterparty
+                        // records the in-wallet leg of a mixed payment.
+                        let sender =
+                            wallet_sender.expect("Outgoing classification requires a wallet input");
+                        let counterparty = all_lock_args
+                            .iter()
+                            .find(|a| **a != sender && wallet_out.contains_key(*a))
+                            .cloned();
+                        (sender, counterparty, external_capacity)
                     }
                     TxKind::DaoDeposit | TxKind::DaoPrepare => {
                         // Use the DAO cell's capacity for deposit/prepare.
-                        tx_view
+                        let amount = tx_view
                             .inner
                             .outputs
                             .iter()
@@ -609,16 +639,10 @@ impl App {
                                     .is_some_and(|t| format!("{:#x}", t.code_hash) == dao_type_hash)
                             })
                             .map(|out| out.capacity.value())
-                            .unwrap_or(owner_capacity)
+                            .unwrap_or(owner_capacity);
+                        (owner_lock_args, None, amount)
                     }
-                    TxKind::DaoWithdraw => owner_capacity,
-                };
-
-                // For outgoing: counterparty is the recipient (from outputs).
-                // For incoming: counterparty is the sender (from input accounts).
-                let internal_counterparty_lock_args = match tx_kind {
-                    TxKind::Incoming => sender_account,
-                    _ => internal_counterparty,
+                    TxKind::DaoWithdraw => (owner_lock_args, None, owner_capacity),
                 };
 
                 let external_recipient_address = match tx_kind {
