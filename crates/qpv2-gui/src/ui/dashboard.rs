@@ -172,7 +172,7 @@ impl App {
                         history,
                         96.0,
                         "NO SYNCED HISTORY YET",
-                        "Your total balance over synced history.",
+                        "Your total balance over the last 3 months.",
                     );
                 });
             });
@@ -255,17 +255,23 @@ impl App {
         });
     }
 
-    /// Reconstructs the wallet's full balance history by replaying the
-    /// transaction tape backwards from the live total. Self transfers
-    /// and DAO operations are (fees aside) net-zero to the wallet
-    /// total and produce no step.
+    /// Reconstructs the wallet's balance over the chart window by
+    /// replaying the transaction tape backwards from the live total.
+    /// Self transfers and DAO operations are (fees aside) net-zero to
+    /// the wallet total and produce no step.
     ///
     /// The line connects the balance after each transaction with
-    /// straight segments (matching the TVL chart's look), from a
-    /// pre-history anchor (the balance before the first transaction,
-    /// ~0 for a wallet funded within the synced window) to the live
-    /// total.
+    /// straight segments (matching the TVL chart's look), ending at the
+    /// live total. It opens with a baseline point: the balance held at
+    /// the window's edge when history extends past it — the callout
+    /// delta then reads as the trend over the window — or, for a wallet
+    /// younger than the window, the ~0 balance before the first
+    /// transaction, so the first deposit draws as a vertical wall.
     fn balance_history(&self, current_total: u64, now: u64) -> Series {
+        // Same span as the TVL chart's weekly series (13 weeks), so the
+        // two charts' callouts read as the same kind of trend.
+        const WINDOW_SECS: u64 = 13 * 7 * 24 * 3600;
+        let window_start = now.saturating_sub(WINDOW_SECS);
         // Clamp event times below `now`: block headers may run ahead
         // of the local clock (consensus allows ~15s), and the series is
         // headed by the (now, total) anchor — a later event would make
@@ -305,20 +311,31 @@ impl App {
         // the head.
         let mut points: Vec<(u64, u64)> = vec![(now, current_total)];
         let mut bal = current_total as i128;
+        // Events older than the window fold into the baseline instead
+        // of being drawn: `bal` at the break is the balance held from
+        // that older event until the next one, i.e. at the window edge.
+        let mut cut_by_window = false;
         for &(ts, delta) in merged.iter().rev() {
+            if ts < window_start {
+                cut_by_window = true;
+                break;
+            }
             points.push((ts, bal.max(0) as u64));
             bal -= delta;
         }
-        // Pre-history anchor: the balance just before the first
-        // external transaction (~0 for a wallet funded within the
-        // synced window), at that same instant — so the first deposit
-        // draws as a vertical wall rising from the baseline. Keeping
-        // ~0 in the series pins the y-axis to it: the chart reads in
-        // absolute terms, every movement's height being its share of
-        // the peak balance. Activity small relative to the total
-        // renders correspondingly small — scale over magnification.
-        if let Some(&(first_ts, _)) = merged.first() {
-            points.push((first_ts, bal.max(0) as u64));
+        // Baseline point. For a wallet younger than the window it sits
+        // at the first transaction's own instant with the ~0 balance
+        // held before it, so the first deposit draws as a vertical wall
+        // and the y-axis pins near zero — the chart reads in absolute
+        // terms, every movement's height being its share of the peak
+        // balance.
+        let baseline_ts = if cut_by_window {
+            Some(window_start)
+        } else {
+            merged.first().map(|&(ts, _)| ts)
+        };
+        if let Some(ts) = baseline_ts {
+            points.push((ts, bal.max(0) as u64));
         }
         points.reverse();
         points
