@@ -65,7 +65,9 @@ pub fn timed_ckb_rpc_client(url: &str) -> ckb_sdk::CkbRpcClient {
 ///
 /// Panics on a malformed URL, matching `LightClientRpcClient::new`'s
 /// behavior.
-pub(crate) fn timed_light_rpc_client(url: &str) -> ckb_sdk::rpc::ckb_light_client::LightClientRpcClient {
+pub(crate) fn timed_light_rpc_client(
+    url: &str,
+) -> ckb_sdk::rpc::ckb_light_client::LightClientRpcClient {
     ckb_sdk::rpc::ckb_light_client::LightClientRpcClient::with_builder(url, |b| {
         b.timeout(RPC_TIMEOUT)
     })

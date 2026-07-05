@@ -269,7 +269,8 @@ impl UnifiedClient for FullNodeClient {
         // wallet code calls this from plain threads, never from inside
         // an async runtime.
         let provider = DefaultTransactionDependencyProvider::new(&self.rpc_url, 10);
-        provider.inner.blocking_lock().rpc_client = super::timed_ckb_async_rpc_client(&self.rpc_url);
+        provider.inner.blocking_lock().rpc_client =
+            super::timed_ckb_async_rpc_client(&self.rpc_url);
         Box::new(provider)
     }
 
