@@ -90,6 +90,13 @@ pub(crate) enum TxKind {
     DaoWithdraw,
 }
 
+/// Blocks that must bury a transaction before its record is final.
+/// CKB reorgs deeper than this are considered impossible. Records at
+/// or past this depth are persisted and never re-checked; younger
+/// records live in memory only and are re-verified against the chain
+/// on every history sync, so a reorg can still move or remove them.
+pub(crate) const CONFIRMATION_DEPTH: u64 = 24;
+
 /// A resolved transaction record for display on the dashboard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TxRecord {
@@ -112,12 +119,27 @@ pub(crate) struct TxRecord {
     pub external_recipient_address: Option<String>,
 }
 
+impl TxRecord {
+    /// Blocks on top of and including this record's block at `tip`;
+    /// 0 while pending or when the tip is unknown or behind.
+    pub fn confirmations(&self, tip: u64) -> u64 {
+        if self.is_pending || self.block_number == 0 || tip < self.block_number {
+            return 0;
+        }
+        tip - self.block_number + 1
+    }
+
+    /// Buried at least [`CONFIRMATION_DEPTH`] blocks deep — no reorg
+    /// can move it, so the record is final.
+    pub fn is_confirmed(&self, tip: u64) -> bool {
+        self.confirmations(tip) >= CONFIRMATION_DEPTH
+    }
+}
+
 /// Streaming event from the transaction history background thread.
 pub(crate) enum TxHistoryEvent {
     Record(TxRecord),
-    /// Emitted when the sync thread has no more records to stream. The
-    /// watermark is derived from the merged `tx_history` vector, so no
-    /// payload is needed here.
+    /// Emitted when the sync thread has no more records to stream.
     Done,
     /// Emitted when the sync gives up because a lookup stayed
     /// unavailable past its retry budget. The records streamed so far

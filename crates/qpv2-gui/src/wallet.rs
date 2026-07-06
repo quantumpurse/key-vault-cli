@@ -183,16 +183,11 @@ impl App {
         }
     }
 
-    /// Highest committed block number in `tx_history`, or 0 when empty.
-    /// Used as `after_block` for the next incremental sync. Derived from
-    /// the in-memory vector — no cached state to keep in sync.
+    /// Highest confirmed block persisted to the history file. Records
+    /// at or below it are final; everything above is provisional and
+    /// re-fetched on every sync.
     pub(crate) fn tx_history_watermark(&self) -> u64 {
-        self.tx_history
-            .iter()
-            .filter(|r| !r.is_pending)
-            .map(|r| r.block_number)
-            .max()
-            .unwrap_or(0)
+        self.confirmed_watermark
     }
 
     /// Wipe all wallet-specific runtime state: accounts, balances,
@@ -220,6 +215,8 @@ impl App {
         self.earliest_funding_block_rx = None;
 
         self.tx_history.clear();
+        self.unconfirmed_tx_records.clear();
+        self.confirmed_watermark = 0;
 
         self.transfer_recipient.clear();
         self.transfer_amount.clear();
@@ -382,6 +379,7 @@ impl App {
         self.dao_prepared_staging.clear();
         self.dao_cells_query_rx = None;
         self.tx_history.clear();
+        self.unconfirmed_tx_records.clear();
         self.tx_history_rx = None;
         self.balance_chart_cache = None;
         self.load_tx_history_from_disk();
@@ -409,13 +407,26 @@ impl App {
     pub(crate) fn load_tx_history_from_disk(&mut self) {
         match TxHistoryStore::load(self.wallet_id, self.qp_client.network().tag()) {
             Ok(Some(store)) => {
+                // The file holds only confirmed records, so its highest
+                // block is the sync floor. Pending rows are skipped
+                // defensively — files written by older builds may
+                // contain them.
+                self.confirmed_watermark = store
+                    .records
+                    .iter()
+                    .filter(|r| !r.is_pending)
+                    .map(|r| r.block_number)
+                    .max()
+                    .unwrap_or(0);
                 self.tx_history = store.records;
             }
             Ok(None) => {
                 self.tx_history.clear();
+                self.confirmed_watermark = 0;
             }
             Err(e) => {
                 self.tx_history.clear();
+                self.confirmed_watermark = 0;
                 let msg = format!("Failed to read cached tx history: {}", e);
                 tracing::error!("{}", msg);
                 self.status = Status::Error(msg);

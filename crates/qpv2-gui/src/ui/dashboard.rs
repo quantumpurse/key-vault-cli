@@ -413,7 +413,7 @@ impl App {
                 (type_x, "TYPE"),
                 (hash_x, "HASH"),
                 (amount_x, "AMOUNT"),
-                (status_x, "STATUS"),
+                (status_x, "CONFIRMATION"),
             ];
             for (x, label) in hcols {
                 painter.text(
@@ -431,6 +431,10 @@ impl App {
             );
 
             let mut any_pending = false;
+            // Confirmation counts are judged against the last polled
+            // tip; 0 (not yet polled) just renders low counts until the
+            // first status poll lands.
+            let tip = self.node_status.tip_block().unwrap_or(0);
             // Copy is deferred past the loop: the rows borrow
             // `self.accounts`, so `self.status` can't be set inside it.
             let mut copied_hash: Option<String> = None;
@@ -461,6 +465,7 @@ impl App {
                     rect,
                     &self.colors,
                     record,
+                    tip,
                     owner_idx,
                     counterparty_idx,
                     (time_x, type_x, hash_x, amount_x, status_x),
@@ -494,6 +499,7 @@ fn draw_tape_row(
     rect: egui::Rect,
     colors: &AppColors,
     record: &TxRecord,
+    tip: u64,
     account_index: Option<usize>,
     counterparty_index: Option<usize>,
     (time_x, type_x, hash_x, amount_x, status_x): (f32, f32, f32, f32, f32),
@@ -588,7 +594,9 @@ fn draw_tape_row(
         colors.text_muted,
     );
 
-    // STATUS.
+    // STATUS. Pending: in the pool, no block yet. Below the
+    // confirmation depth: committed but still reorg-able — show the
+    // progress count. At depth: final.
     if record.is_pending {
         breathing_dot(
             painter,
@@ -604,13 +612,25 @@ fn draw_tape_row(
             label_font(9.0),
             colors.accent,
         );
-    } else {
+    } else if record.is_confirmed(tip) {
         painter.text(
             egui::pos2(rect.left() + status_x, cy),
             egui::Align2::LEFT_CENTER,
             "CONFIRMED",
             label_font(9.0),
             colors.accent2.gamma_multiply(0.7),
+        );
+    } else {
+        painter.text(
+            egui::pos2(rect.left() + status_x, cy),
+            egui::Align2::LEFT_CENTER,
+            format!(
+                "{}/{}",
+                record.confirmations(tip),
+                crate::types::CONFIRMATION_DEPTH
+            ),
+            label_font(9.0),
+            colors.accent,
         );
     }
 }

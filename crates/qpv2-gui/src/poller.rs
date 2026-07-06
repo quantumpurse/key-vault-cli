@@ -254,10 +254,41 @@ impl App {
         loop {
             match rx.try_recv() {
                 Ok(Ok(TxHistoryEvent::Record(record))) => {
-                    self.tx_history.push(record);
+                    // Live display: a re-fetched provisional row
+                    // replaces its old copy in place instead of showing
+                    // twice while the sync streams. The batch keeps the
+                    // authoritative set for the reconcile below.
+                    match self
+                        .tx_history
+                        .iter_mut()
+                        .find(|r| r.tx_hash == record.tx_hash)
+                    {
+                        Some(row) => *row = record.clone(),
+                        None => self.tx_history.push(record.clone()),
+                    }
+                    self.unconfirmed_tx_records.push(record);
                 }
                 Ok(Ok(TxHistoryEvent::Done)) => {
                     self.tx_history_rx = None;
+                    let tip = self.node_status.tip_block().unwrap_or(0);
+                    let watermark = self.confirmed_watermark;
+
+                    // Reconcile the provisional window (records above
+                    // the watermark): the batch just re-fetched it
+                    // from the chain, so the batch replaces it — a
+                    // reorg-moved tx comes back at its new block, a
+                    // reorged-away tx simply doesn't come back. Kept
+                    // from the old vector: final records at or below
+                    // the watermark, and pending rows the indexer can't
+                    // return yet (unless the batch superseded them).
+                    let batch = std::mem::take(&mut self.unconfirmed_tx_records);
+                    let batch_hashes: std::collections::HashSet<String> =
+                        batch.iter().map(|r| r.tx_hash.clone()).collect();
+                    self.tx_history.retain(|r| {
+                        !batch_hashes.contains(&r.tx_hash)
+                            && (r.block_number <= watermark || r.is_pending)
+                    });
+                    self.tx_history.extend(batch);
 
                     // Sort newest-first and de-duplicate by tx hash.
                     // Each fetch batch arrives sorted, but incremental
@@ -294,17 +325,46 @@ impl App {
                         true
                     });
 
-                    // Persist the new snapshot so a restart can render
-                    // instantly and the next sync only pulls blocks above
-                    // the derived watermark. Scoped to the active network
-                    // so mainnet and testnet caches can't cross-contaminate.
-                    // A write failure here is non-fatal — the next
-                    // completed sync saves the merged state again.
+                    // Persist only final records — once written they
+                    // are never edited or re-checked; the provisional
+                    // window above them is rebuilt from the chain on
+                    // every sync. Rows at or below the watermark are
+                    // already on disk — they re-enter untouched. A
+                    // write failure is non-fatal: the watermark stays
+                    // put, so unsaved records are re-fetched next sync.
                     let store = crate::tx_history::TxHistoryStore {
-                        records: self.tx_history.clone(),
+                        records: self
+                            .tx_history
+                            .iter()
+                            .filter(|r| {
+                                (!r.is_pending && r.block_number <= watermark)
+                                    || r.is_confirmed(tip)
+                            })
+                            .cloned()
+                            .collect(),
                     };
-                    if let Err(e) = store.save(self.wallet_id, self.qp_client.network().tag()) {
-                        tracing::error!("tx_history: failed to persist: {}", e);
+                    // Skip the write when nothing crossed the
+                    // confirmation depth since the last save: rows at or
+                    // below the file floor are on disk already, so the
+                    // rewrite would be byte-identical — and syncs
+                    // complete every second.
+                    let has_new_confirmed = store
+                        .records
+                        .iter()
+                        .any(|r| r.block_number > self.confirmed_watermark);
+                    if has_new_confirmed {
+                        match store.save(self.wallet_id, self.qp_client.network().tag()) {
+                            Ok(()) => {
+                                self.confirmed_watermark = store
+                                    .records
+                                    .iter()
+                                    .map(|r| r.block_number)
+                                    .max()
+                                    .unwrap_or(0)
+                                    .max(self.confirmed_watermark);
+                            }
+                            Err(e) => tracing::error!("tx_history: failed to persist: {}", e),
+                        }
                     }
                     break;
                 }
@@ -343,6 +403,8 @@ impl App {
     /// sync would skip them for good. Disk is written only on `Done`,
     /// so it is always a consistent baseline.
     fn rollback_tx_history(&mut self) {
+        // so polling in the next frame doesn't see the stale records.
+        self.unconfirmed_tx_records.clear();
         self.tx_history =
             crate::tx_history::TxHistoryStore::load(self.wallet_id, self.qp_client.network().tag())
                 .unwrap_or_else(|e| {
@@ -351,6 +413,13 @@ impl App {
                 })
                 .map(|store| store.records)
                 .unwrap_or_default();
+        self.confirmed_watermark = self
+            .tx_history
+            .iter()
+            .filter(|r| !r.is_pending)
+            .map(|r| r.block_number)
+            .max()
+            .unwrap_or(0);
         tracing::warn!(
             "tx_history: sync did not finish; rolled back to {} saved records",
             self.tx_history.len()

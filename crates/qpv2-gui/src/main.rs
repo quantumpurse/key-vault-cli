@@ -147,6 +147,14 @@ pub(crate) struct App {
     // see `App::tx_history_watermark()`.
     pub(crate) tx_history: Vec<TxRecord>,
     pub(crate) tx_history_rx: Option<mpsc::Receiver<Result<TxHistoryEvent, String>>>,
+    /// Temporary buffer for records arriving from the current sync.
+    /// Consumed on completion to reconcile against the chain — any
+    /// record not in the batch was reorged away and gets dropped.
+    pub(crate) unconfirmed_tx_records: Vec<TxRecord>,
+    /// Highest block ever persisted to the active network's history
+    /// file. Advances only after a successful save, so unsaved
+    /// records are always re-fetched.
+    pub(crate) confirmed_watermark: u64,
 
     // ── QR-lock adoption (dashboard side panel) ──
     // Weekly series of CKB locked under the Quantum Resistant lock script,
@@ -452,6 +460,8 @@ impl App {
             dao_deposit_from_account: 0,
             dao_deposit_all: false,
             tx_history: Vec::new(),
+            unconfirmed_tx_records: Vec::new(),
+            confirmed_watermark: 0,
             tx_history_rx: None,
             qr_adoption_series: qr_adoption::load_series(node_config.network.tag()),
             qr_adoption_rx: None,
