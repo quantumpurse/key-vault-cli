@@ -42,8 +42,9 @@
 
 ## Chain / Sync
 
-- [ ] **Reorg handling for tx history.** `tx_history.json` currently freezes records once their block is below the watermark. CKB reorgs (rare) would leave stale records in the store. Maintain a mutable "reorg window" of the last ~24 blocks: re-fetch on each tick, reconcile pending↔committed, remove records whose hash is no longer on chain. Below the window, finalize.
-- [ ] **Cancellable tx-history sync thread.** The sync thread retries transient RPC failures forever. If the network is permanently down, the thread stays alive until app quit (harmless but inelegant). Add a cancel flag (e.g. an `Arc<AtomicBool>` reset when the user locks the wallet or changes node config) so retries terminate promptly.
+- [x] **Reorg handling for tx history.** Records with fewer than 24 confirmations are provisional (memory-only, rebuilt every sync). Records at or past that depth are final and persisted. The confirmed watermark is file-derived, so the provisional window is always re-fetched. Reorged-away txs simply don't appear in the batch; reorg-moved txs come back at their new block.
+- [x] **Cancellable tx-history sync thread.** Bounded retries (8 attempts, exponential backoff) replace the infinite retry loop. On give-up the sync aborts, rolls back to the last saved snapshot, and yields the single-flight slot so a later tick retries from current chain state.
+- [ ] **Show pending transactions from the tx pool.** The dashboard's PENDING state is unreachable — the indexer only returns mined transactions and nothing creates pending records locally. On full node / public RPC backends, query `get_raw_tx_pool`, resolve each hash with `get_transaction`, match outputs against the wallet's lock args, and stream matching entries as `TxRecord { is_pending: true, block_number: 0 }`. The existing reconcile already retains pending rows and replaces them when the mined version arrives. Light client has no local mempool so this is full node / public RPC only.
 
 
 # KNOWN BUGS
