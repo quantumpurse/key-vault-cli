@@ -23,15 +23,16 @@ impl App {
     // Unlocked chrome
     // ────────────────────────────────────────────────────────────────
 
-    pub(crate) fn show_unlocked(&mut self, ctx: &egui::Context) {
+    pub(crate) fn show_unlocked(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx();
         self.handle_module_shortcuts(ctx);
 
         // ── Top telemetry strip ──
-        egui::TopBottomPanel::top("telemetry")
-            .exact_height(TELEMETRY_H)
+        egui::Panel::top("telemetry")
+            .exact_size(TELEMETRY_H)
             .show_separator_line(false)
             .frame(egui::Frame::new().fill(self.colors.surface))
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.draw_telemetry_strip(ui);
                 let r = ui.clip_rect();
                 ui.painter().hline(
@@ -42,11 +43,11 @@ impl App {
             });
 
         // ── Bottom status line ──
-        egui::TopBottomPanel::bottom("statusline")
-            .exact_height(STATUSLINE_H)
+        egui::Panel::bottom("statusline")
+            .exact_size(STATUSLINE_H)
             .show_separator_line(false)
             .frame(egui::Frame::new().fill(self.colors.surface))
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.draw_status_line(ui);
                 let r = ui.clip_rect();
                 ui.painter().hline(
@@ -57,12 +58,12 @@ impl App {
             });
 
         // ── Left module rail ──
-        egui::SidePanel::left("rail")
+        egui::Panel::left("rail")
             .resizable(false)
             .show_separator_line(false)
-            .exact_width(RAIL_W)
+            .exact_size(RAIL_W)
             .frame(egui::Frame::new().fill(self.colors.surface))
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.draw_module_rail(ui);
                 let r = ui.clip_rect();
                 ui.painter().vline(
@@ -75,7 +76,7 @@ impl App {
         // ── Main content area ──
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(self.colors.bg))
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.draw_unlocked_bg(ui);
 
                 egui::ScrollArea::vertical()
@@ -818,7 +819,7 @@ impl App {
 /// never reflows the content below it.
 fn boot_lines(
     ui: &mut egui::Ui,
-    id: impl std::hash::Hash,
+    id: impl std::hash::Hash + std::fmt::Debug,
     text: &str,
     cps: f64,
     size: f32,
@@ -885,7 +886,12 @@ fn draw_qp_logo_chip(
 
 /// Reveal `text` progressively at `cps` characters per second from the
 /// first frame this id is seen — the terminal type-on effect.
-fn type_on(ui: &mut egui::Ui, id: impl std::hash::Hash, text: &str, cps: f64) -> String {
+fn type_on(
+    ui: &mut egui::Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    text: &str,
+    cps: f64,
+) -> String {
     let id = egui::Id::new(id);
     let now = ui.input(|i| i.time);
     let start = ui

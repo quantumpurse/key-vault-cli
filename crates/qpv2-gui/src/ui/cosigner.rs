@@ -253,7 +253,7 @@ impl App {
                                 .hint_text(hint)
                                 .desired_width(ui.available_width())
                                 .desired_rows(3)
-                                .frame(false)
+                                .frame(egui::Frame::NONE)
                                 .font(egui::FontId::monospace(11.0)),
                         );
                     });
@@ -437,7 +437,7 @@ impl App {
                         egui::TextEdit::multiline(&mut display)
                             .desired_width(ui.available_width())
                             .desired_rows(4)
-                            .frame(false)
+                            .frame(egui::Frame::NONE)
                             .font(egui::FontId::monospace(11.0)),
                     );
                 });
@@ -484,7 +484,7 @@ impl App {
                         .hint_text("Paste signing request JSON here...")
                         .desired_width(ui.available_width())
                         .desired_rows(4)
-                        .frame(false)
+                        .frame(egui::Frame::NONE)
                         .font(egui::FontId::monospace(11.0)),
                 );
             });

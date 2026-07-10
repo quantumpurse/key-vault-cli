@@ -521,7 +521,8 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         // First-frame setup for password-mode wallets that App::new
         // dropped straight into Screen::Unlocked. Mirrors what
         // `unlock_with_keychain` does for Touch ID wallets after a
@@ -536,7 +537,7 @@ impl eframe::App for App {
             self.fetch_node_status();
         }
 
-        self.tick_status(ctx);
+        self.tick_status(&ctx);
 
         if self.screen == Screen::Unlocked {
             self.poll_all_balances();
@@ -573,18 +574,18 @@ impl eframe::App for App {
         }
 
         // Show popups / modals if open.
-        self.show_node_selector_popup(ctx);
-        self.show_wallet_selector_popup(ctx);
-        self.show_wallet_modal(ctx);
-        self.show_multisig_modal(ctx);
-        self.show_dao_deposit_modal(ctx);
+        self.show_node_selector_popup(&ctx);
+        self.show_wallet_selector_popup(&ctx);
+        self.show_wallet_modal(&ctx);
+        self.show_multisig_modal(&ctx);
+        self.show_dao_deposit_modal(&ctx);
 
         // Polling main stages of the wallet.
         match self.screen.clone() {
             Screen::Setup => {
                 egui::CentralPanel::default()
                     .frame(egui::Frame::new().fill(self.colors.bg))
-                    .show(ctx, |ui| {
+                    .show(ui, |ui| {
                         self.draw_gradient_bg(ui, false);
                         self.show_welcome(ui);
                     });
@@ -592,14 +593,14 @@ impl eframe::App for App {
             Screen::Locked => {
                 egui::CentralPanel::default()
                     .frame(egui::Frame::new().fill(self.colors.bg))
-                    .show(ctx, |ui| {
+                    .show(ui, |ui| {
                         self.draw_gradient_bg(ui, true);
                         self.show_locked(ui);
                     });
             }
             Screen::Unlocked => {
                 // Sidebar + content layout handled by show_unlocked.
-                self.show_unlocked(ctx);
+                self.show_unlocked(ui);
             }
         }
 

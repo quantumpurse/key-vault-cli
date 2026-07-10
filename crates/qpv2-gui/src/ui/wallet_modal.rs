@@ -115,7 +115,7 @@ impl App {
                         .hint_text("auto-generated if empty")
                         .desired_width(ui.available_width())
                         .font(egui::FontId::monospace(12.5))
-                        .frame(false),
+                        .frame(egui::Frame::NONE),
                 );
             });
 
