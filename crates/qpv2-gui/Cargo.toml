@@ -1,6 +1,6 @@
 [package]
 name = "qpv2-gui"
-version = "0.1.0"
+version = "2.0.0-rc.5"
 edition = "2021"
 description = "GUI for SPHINCS+ key vault with Passkey PRF / Touch ID support."
 repository = "https://github.com/quantumpurse/quantum-purse-v2.git"

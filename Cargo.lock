@@ -4977,7 +4977,7 @@ dependencies = [
 
 [[package]]
 name = "qpv2-gui"
-version = "0.1.0"
+version = "2.0.0-rc.5"
 dependencies = [
  "chrono",
  "ckb-fips205-utils",

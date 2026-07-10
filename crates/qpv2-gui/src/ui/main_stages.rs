@@ -141,7 +141,7 @@ impl App {
                     .color(c_text),
             );
             ui.label(
-                egui::RichText::new("V2")
+                egui::RichText::new(concat!("V", env!("CARGO_PKG_VERSION")).to_uppercase())
                     .font(label_font(9.0))
                     .color(c_muted),
             );
