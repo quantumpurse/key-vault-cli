@@ -129,6 +129,7 @@ impl App {
                         AuthMethod::Keychain => keychain::short_name().to_string(),
                         AuthMethod::Password => "PASSWORD".to_string(),
                         AuthMethod::Fido2 { .. } => "FIDO2".to_string(),
+                        AuthMethod::Trezor { .. } => "TREZOR".to_string(),
                     }
                 });
 

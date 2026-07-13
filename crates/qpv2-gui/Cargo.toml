@@ -14,6 +14,7 @@ path = "src/main.rs"
 qpv2-core = { path = "../qpv2-core" }
 keychain = { path = "../keychain", features = ["fido2"] }
 ckb-node = { path = "../ckb-node" }
+trezor-signer = { path = "../trezor-signer" }
 ckb-fips205-utils = { path = "../ckb-fips205-utils", features = ["signing"] }
 ckb-gen-types = { version = "1.0.2", default-features = false }
 ckb-jsonrpc-types = "1.0.2"

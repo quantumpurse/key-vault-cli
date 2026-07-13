@@ -571,6 +571,89 @@ impl App {
         );
     }
 
+    /// Sign a transaction with a Trezor device and broadcast it.
+    ///
+    /// Unlike the software paths, the device recomputes the signing message
+    /// itself, so `input_cells` is unused here; instead the full previous
+    /// transactions are streamed to the device for its trustless capacity
+    /// check. The whole round-trip (fetch previous txs, on-device confirmation
+    /// and signing, broadcast) runs on a worker thread so the UI stays
+    /// responsive while the user confirms on the device. This handles single-sig
+    /// accounts only, since the firmware cannot co-sign a multisig group.
+    pub(crate) fn sign_and_send_with_trezor(
+        &mut self,
+        kind: TransactionKind,
+        unsigned_tx: ckb_types::core::TransactionView,
+        _input_cells: Vec<(ckb_types::packed::CellOutput, ckb_types::bytes::Bytes)>,
+        lock_args: String,
+    ) {
+        let account = match self.accounts.iter().find(|a| a.lock_args == lock_args) {
+            Some(a) => a.clone(),
+            None => {
+                self.tx_status = TransactionStatus::Error("Account not found.".to_string());
+                return;
+            }
+        };
+
+        if !account.config.is_single_sig() {
+            self.tx_status = TransactionStatus::Error(
+                "Signing a multisig transaction on a Trezor is not supported yet.".to_string(),
+            );
+            return;
+        }
+
+        let variant = account.config.signers[0].variant;
+        let account_index = account.index;
+        let signing_lock_size = account.config.max_witness_lock_size();
+        let is_mainnet = self.qp_client.is_mainnet();
+        let qp_client = self.qp_client.clone();
+
+        tracing::info!(
+            "Trezor signing initiated: account_index={}, variant={:?}",
+            account_index,
+            variant
+        );
+
+        // Poller set AwaitingSignature; the worker does fetch → sign → send and
+        // reports over the shared send channel, finalized by poll_transaction_send.
+        let (tx_send, rx_send) = mpsc::channel();
+        self.transaction_send_rx = Some(rx_send);
+
+        std::thread::spawn(move || {
+            let result = (|| -> Result<String, String> {
+                let sign_group: Vec<u32> =
+                    (0..unsigned_tx.inputs().len() as u32).collect();
+
+                let prev_txs =
+                    ckb_node::wallet_helpers::tx_builder::fetch_prev_txs(&qp_client, &unsigned_tx)
+                        .map_err(|e| format!("Failed to fetch previous transactions: {}", e))?;
+
+                let mut device = trezor_signer::open()
+                    .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
+
+                let signed = device
+                    .sign_tx(
+                        account_index,
+                        variant,
+                        is_mainnet,
+                        &unsigned_tx,
+                        signing_lock_size,
+                        &prev_txs,
+                        &sign_group,
+                    )
+                    .map_err(|e| format!("Trezor signing failed: {}", e))?;
+
+                let signed_tx = ckb_node::fill_witness(unsigned_tx, 0, signed.witness_lock)
+                    .map_err(|e| format!("Failed to fill witness: {}", e))?;
+
+                ckb_node::wallet_helpers::tx_builder::send_transaction(&qp_client, &signed_tx)
+                    .map(|hash| format!("{:#x}", hash))
+                    .map_err(|e| format!("Failed to send transaction: {}", e))
+            })();
+            let _ = tx_send.send((kind, result));
+        });
+    }
+
     /// Auth-mechanism-agnostic signing core. Computes the CKB tx-message
     /// hash, then branches:
     /// - **Single-sig**: signs, fills witness, and broadcasts in one shot.

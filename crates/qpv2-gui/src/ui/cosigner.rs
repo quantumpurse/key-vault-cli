@@ -682,6 +682,14 @@ impl App {
                     }
                 }
             }
+            Some(qpv2_core::types::AuthMethod::Trezor { .. }) => {
+                // Multisig co-signing on a Trezor is not supported: the firmware
+                // only signs a transaction locked by its own single-sig lock.
+                self.status = crate::types::Status::Error(
+                    "Co-signing a multisig transaction on a Trezor is not supported yet.".to_string(),
+                );
+                return;
+            }
             None => {
                 self.status =
                     crate::types::Status::Error("No authentication method set.".to_string());

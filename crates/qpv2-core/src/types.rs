@@ -298,6 +298,11 @@ pub enum AuthMethod {
     Keychain,
     /// FIDO2 hardware key with hmac-secret extension.
     Fido2 { credential_id: String },
+    /// Watch-only wallet backed by a Trezor hardware device. The private key
+    /// never leaves the device; there is no vault seed, and signing is done by
+    /// streaming the transaction to the device. `model` is a display label
+    /// (e.g. "Trezor Safe 7").
+    Trezor { model: String },
 }
 
 /// Authentication key used to encrypt/decrypt the vault.

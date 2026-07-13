@@ -527,6 +527,9 @@ impl App {
                     .map(AuthKey::CryptoKey)
                     .map_err(|e| format!("Key derivation failed: {}", e))
             }
+            Some(AuthMethod::Trezor { .. }) => Err(
+                "This is a Trezor wallet; approve the action on your device instead.".to_string(),
+            ),
             None => Err("No authentication method set.".to_string()),
         }
     }

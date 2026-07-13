@@ -38,6 +38,9 @@ impl App {
                             lock_args,
                         );
                     }
+                    Some(AuthMethod::Trezor { .. }) => {
+                        self.sign_and_send_with_trezor(kind, unsigned_tx, input_cells, lock_args);
+                    }
                     None => {
                         tracing::error!("No authentication method set.");
                         self.tx_status =

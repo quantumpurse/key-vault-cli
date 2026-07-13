@@ -870,6 +870,7 @@ impl KeyVault {
                     AuthMethod::Password => "Password",
                     AuthMethod::Keychain => "Keychain",
                     AuthMethod::Fido2 { .. } => "Fido2",
+                    AuthMethod::Trezor { .. } => "Trezor",
                 };
                 let msg = format!(
                     "Authentication method mismatch: wallet uses {}, attempted {}.",
@@ -880,6 +881,53 @@ impl KeyVault {
                 Err(msg)
             }
         }
+    }
+
+    /// Whether a wallet is backed by a hardware device (Trezor). Such wallets
+    /// hold no seed; signing is delegated to the device.
+    pub fn is_device_backed(wallet_id: u32) -> bool {
+        matches!(
+            Self::read_wallet_info(wallet_id).map(|w| w.auth_method),
+            Ok(AuthMethod::Trezor { .. })
+        )
+    }
+
+    /// Creates a watch-only, device-backed wallet. Unlike [`Self::generate_master_seed`]
+    /// this writes no `seed.json`: the private key lives on the hardware device.
+    /// The imported `accounts` (public key + lock args exported from the device)
+    /// must be ordered by device account index starting at 0, so each stored
+    /// account's position equals its derivation index. Device accounts use the
+    /// V1 single-sig convention, matching the firmware's lock script.
+    pub fn create_device_wallet(
+        wallet_id: u32,
+        name: &str,
+        variant: SpxVariant,
+        model: &str,
+        accounts: Vec<SphincsPlusAccount>,
+    ) -> Result<(), String> {
+        db::wallets::validate_wallet_name(name, None).map_err(|e| e.to_string())?;
+
+        if Self::has_master_seed(wallet_id)? {
+            return Err("A seed-backed wallet already exists at this id.".to_string());
+        }
+
+        db::create_wallet_dir(wallet_id).map_err(|e| e.to_string())?;
+
+        let wallet_info = types::WalletInfo {
+            name: name.to_string(),
+            spx_variant: variant,
+            auth_method: AuthMethod::Trezor {
+                model: model.to_string(),
+            },
+            single_sig_convention: SingleSigConvention::V1,
+        };
+        db::set_wallet_info(wallet_id, wallet_info).map_err(|e| e.to_string())?;
+
+        for account in accounts {
+            db::add_singlesig_account(wallet_id, account).map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
     }
 
     pub fn list_wallets() -> Result<Vec<types::WalletEntry>, String> {

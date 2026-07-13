@@ -409,6 +409,10 @@ fn get_auth_key(wallet_id: u32) -> Result<AuthKey, String> {
             let key = qpv2_core::utilities::derive_vault_enc_key(&hmac_output)?;
             Ok(AuthKey::CryptoKey(key))
         }
+        AuthMethod::Trezor { .. } => Err(
+            "This is a Trezor (hardware) wallet; signing happens on the device, so there is no vault key."
+                .to_string(),
+        ),
     }
 }
 
@@ -1772,6 +1776,7 @@ fn main() -> Result<(), String> {
                             AuthMethod::Password => "Password".to_string(),
                             AuthMethod::Keychain => keychain::display_name().to_string(),
                             AuthMethod::Fido2 { .. } => "FIDO2 Security Key".to_string(),
+                            AuthMethod::Trezor { ref model } => format!("Trezor ({model})"),
                         };
 
                         println!("  [{}] {}", entry.id, entry.name);

@@ -213,6 +213,7 @@ impl App {
                     AuthMethod::Password => "PASSWORD".to_string(),
                     AuthMethod::Keychain => keychain::short_name().to_string(),
                     AuthMethod::Fido2 { .. } => "FIDO2".to_string(),
+                    AuthMethod::Trezor { .. } => "TREZOR".to_string(),
                 };
                 let cw_is_v1 = cw.single_sig_convention == SingleSigConvention::V1;
                 let cw_acct_count = cw.account_count;
