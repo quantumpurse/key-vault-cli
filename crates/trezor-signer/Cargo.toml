@@ -1,0 +1,22 @@
+[package]
+name = "trezor-signer"
+version = "2.0.0-rc.5"
+edition = "2021"
+license = "MIT"
+description = "Trezor Safe hardware signer for QuantumPurse: streams a CKB transaction to the device and returns a SPHINCS+ witness lock."
+
+[dependencies]
+# Vendored Trezor host client (Protocol v1 + UDP/USB transports + generated CKB
+# protobuf bindings). Only the `ckb` message bindings are pulled in.
+trezor-client = { path = "../../vendor/trezor-client", default-features = false, features = ["ckb"] }
+
+qpv2-core = { path = "../qpv2-core" }
+ckb-fips205-utils = { path = "../ckb-fips205-utils", features = ["signing"] }
+ckb-types = "=1.0.1"
+
+hex = "0.4"
+thiserror = "2.0"
+tracing = "0.1"
+
+[dev-dependencies]
+# Integration tests drive a live emulator; see tests/emulator.rs.
