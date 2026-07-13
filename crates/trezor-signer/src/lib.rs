@@ -11,11 +11,14 @@
 //! device over Protocol v1 (the vendored `trezor-client`) across the UDP
 //! (emulator) and USB transports; Bluetooth (THP v2) is a future milestone.
 
+mod conv;
 mod device;
 mod error;
+mod stream;
 
 pub use device::{list_devices, open, DeviceAddress, DeviceInfo, TrezorDevice, TREZOR_CONVENTION};
 pub use error::TrezorSignerError;
+pub use stream::SignedWitness;
 
 /// The default SPHINCS+ variant used when the caller does not specify one:
 /// `SpxVariant::Sha2128S` (id 49, `SLH-DSA-SHA2-128s`) — matching the Trezor

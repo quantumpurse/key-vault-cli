@@ -15,6 +15,6 @@ pub mod utils;
 pub use dao::{QpDaoDepositBuilder, QpDaoPrepareBuilder, QpDaoWithdrawBuilder};
 pub use signing::{
     assemble_multisig_witness, build_signing_request, compute_signing_message, fetch_input_cells,
-    fill_witness, send_transaction,
+    fetch_prev_txs, fill_witness, send_transaction,
 };
 pub use transfer::QpTransferBuilder;

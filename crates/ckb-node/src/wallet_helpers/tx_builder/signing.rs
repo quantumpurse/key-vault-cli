@@ -226,6 +226,44 @@ pub fn fetch_input_cells(
     Ok(inputs)
 }
 
+/// Fetches the full previous transaction for every input, keyed by tx hash.
+///
+/// A hardware signer (Trezor) verifies input capacities trustlessly by
+/// re-serializing each referenced previous transaction and matching its
+/// recomputed hash against the spending input's `OutPoint`. Unlike
+/// [`fetch_input_cells`], which keeps only the single spent `CellOutput`, this
+/// returns the entire previous transaction (version, inputs, outputs, data,
+/// cell deps, header deps) that the device streams and re-hashes. Each distinct
+/// referenced tx hash is fetched once.
+pub fn fetch_prev_txs(
+    qp_client: &QpClient,
+    tx: &TransactionView,
+) -> Result<std::collections::HashMap<H256, TransactionView>, NodeManagerError> {
+    let mut prev_txs: std::collections::HashMap<H256, TransactionView> =
+        std::collections::HashMap::new();
+
+    for input in tx.inputs().into_iter() {
+        let tx_hash: H256 = input.previous_output().tx_hash().unpack();
+        if prev_txs.contains_key(&tx_hash) {
+            continue;
+        }
+
+        let tx_status = qp_client.get_transaction(tx_hash.clone())?.ok_or_else(|| {
+            NodeManagerError::RpcError(format!("Input transaction {} not found.", tx_hash))
+        })?;
+        let prev_tx_view = tx_status.transaction.ok_or_else(|| {
+            NodeManagerError::RpcError(format!("Input transaction {} has no data.", tx_hash))
+        })?;
+
+        // jsonrpc Transaction -> packed -> core view, so the device can read
+        // every RawTransaction field and recompute the hash.
+        let packed: ckb_types::packed::Transaction = prev_tx_view.inner.into();
+        prev_txs.insert(tx_hash, packed.into_view());
+    }
+
+    Ok(prev_txs)
+}
+
 /// Replaces the placeholder witness at the given index with the signed witness data.
 ///
 /// The `signature_bytes` should be the complete lock field content as returned

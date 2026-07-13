@@ -14,9 +14,16 @@ qpv2-core = { path = "../qpv2-core" }
 ckb-fips205-utils = { path = "../ckb-fips205-utils", features = ["signing"] }
 ckb-types = "=1.0.1"
 
+# Same pinned protobuf runtime the vendored client uses (for MessageField).
+protobuf = "=3.7.2"
 hex = "0.4"
 thiserror = "2.0"
 tracing = "0.1"
 
 [dev-dependencies]
-# Integration tests drive a live emulator; see tests/emulator.rs.
+# Integration tests drive a live emulator; see tests/emulator.rs. ckb-node
+# provides compute_signing_message for the sign-and-verify parity check.
+ckb-node = { path = "../ckb-node" }
+qpv2-core = { path = "../qpv2-core" }
+ckb-types = "=1.0.1"
+hex = "0.4"
