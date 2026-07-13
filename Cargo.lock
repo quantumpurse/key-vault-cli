@@ -4930,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "qpv2-cli"
-version = "1.0.0"
+version = "0.1.0"
 dependencies = [
  "ckb-jsonrpc-types",
  "ckb-node",
@@ -4950,7 +4950,7 @@ dependencies = [
 
 [[package]]
 name = "qpv2-core"
-version = "0.3.2"
+version = "1.0.0"
 dependencies = [
  "aes-gcm",
  "anyhow",

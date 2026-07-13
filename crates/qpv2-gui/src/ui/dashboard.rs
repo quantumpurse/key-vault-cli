@@ -212,7 +212,7 @@ impl App {
                 ),
                 ("APC", self.compute_dao_apc(), self.colors.accent2),
                 (
-                    "QR TVL",
+                    "QR LOCK TVL",
                     self.qr_adoption_series
                         .last()
                         .map(|&(_, v)| meta_ckb(v))
@@ -529,8 +529,8 @@ fn draw_tape_row(
         TxKind::Outgoing => ("OUT", colors.danger),
         TxKind::SelfTransfer => ("SELF", colors.text_muted),
         TxKind::DaoDeposit => ("DEP", colors.accent),
-        TxKind::DaoPrepare => ("WD", colors.accent),
-        TxKind::DaoWithdraw => ("UNLK", colors.accent),
+        TxKind::DaoPrepare => ("REQ", colors.accent),
+        TxKind::DaoWithdraw => ("WIT", colors.accent),
     };
     paint_badge(
         painter,
@@ -572,11 +572,17 @@ fn draw_tape_row(
     }
 
     // AMOUNT: signed integer part in semantic color, fraction dim.
-    // Self transfers are unsigned: the wallet total is unchanged.
+    // Internal moves are unsigned: the wallet total is unchanged.
+    // Self transfers and every DAO op (deposit/request lock the
+    // wallet's own coins; withdraw returns them) stay within the
+    // wallet, so none read as an outgoing payment.
     let (prefix, amount_color) = match record.tx_kind {
-        TxKind::SelfTransfer => ("", colors.text),
+        TxKind::SelfTransfer
+        | TxKind::DaoDeposit
+        | TxKind::DaoPrepare
+        | TxKind::DaoWithdraw => ("", colors.text),
         TxKind::Incoming => ("+", colors.accent2),
-        _ => ("\u{2212}", colors.danger),
+        TxKind::Outgoing => ("\u{2212}", colors.danger),
     };
     let (int, frac) = ckb_split(record.amount);
     let int_rect = painter.text(

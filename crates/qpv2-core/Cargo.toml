@@ -1,6 +1,6 @@
 [package]
 name = "qpv2-core"
-version = "0.3.2"
+version = "1.0.0"
 edition = "2021"
 description = "Core library for SPHINCS+-based key management with CKB blockchain address resolution."
 license = "MIT"
