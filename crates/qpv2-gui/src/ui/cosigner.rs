@@ -686,7 +686,8 @@ impl App {
                 // Multisig co-signing on a Trezor is not supported: the firmware
                 // only signs a transaction locked by its own single-sig lock.
                 self.status = crate::types::Status::Error(
-                    "Co-signing a multisig transaction on a Trezor is not supported yet.".to_string(),
+                    "Co-signing a multisig transaction on a Trezor is not supported yet."
+                        .to_string(),
                 );
                 return;
             }

@@ -109,8 +109,10 @@ impl TrezorDevice {
                         .ok_or_else(|| protocol(format!("witness index {idx} out of range")))?;
                     let mut ack = protos::CKBTxAckWitness::new();
                     if idx == signing_index {
-                        ack.witness_args =
-                            MessageField::some(crate::conv::signing_witness_args(&raw, signing_lock_size));
+                        ack.witness_args = MessageField::some(crate::conv::signing_witness_args(
+                            &raw,
+                            signing_lock_size,
+                        ));
                     } else {
                         ack.set_raw(raw.to_vec());
                     }
@@ -190,8 +192,11 @@ fn call<S: TrezorMessage>(
     dev: &mut Trezor,
     msg: S,
 ) -> Result<protos::CKBTxRequest, TrezorSignerError> {
-    handle_interaction(dev.call(msg, Box::new(|_, m: protos::CKBTxRequest| Ok(m))).map_err(client_err)?)
-        .map_err(client_err)
+    handle_interaction(
+        dev.call(msg, Box::new(|_, m: protos::CKBTxRequest| Ok(m)))
+            .map_err(client_err)?,
+    )
+    .map_err(client_err)
 }
 
 fn protocol(msg: String) -> TrezorSignerError {

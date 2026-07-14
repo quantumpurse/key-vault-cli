@@ -51,8 +51,10 @@ where
         scope.spawn(move || {
             while !stop_clone.load(Ordering::Relaxed) {
                 let _ = debuglink.send_message(decision.clone());
-                let _ = debuglink
-                    .call(DebugLinkGetState::new(), Box::new(|_, m: DebugLinkState| Ok(m)));
+                let _ = debuglink.call(
+                    DebugLinkGetState::new(),
+                    Box::new(|_, m: DebugLinkState| Ok(m)),
+                );
             }
         });
         let res = f();
@@ -109,7 +111,9 @@ fn sign_transfer_verifies() {
     let mut dev = trezor_signer::open().expect("connect to emulator");
 
     let (signed, digest, pubkey) = with_auto_approve(|| {
-        let addr = dev.get_address(0, variant, false, false).expect("get_address");
+        let addr = dev
+            .get_address(0, variant, false, false)
+            .expect("get_address");
         let lock = testnet_lock(&addr.lock_args);
         let config = MultisigConfig::single_sig(variant, addr.pubkey.clone(), TREZOR_CONVENTION);
         let signing_lock_size = config.max_witness_lock_size();
@@ -150,18 +154,33 @@ fn sign_transfer_verifies() {
         let digest = ckb_node::compute_signing_message(&unsigned, &input_cells, 0)
             .expect("compute_signing_message");
         let signed = dev
-            .sign_tx(0, variant, false, &unsigned, signing_lock_size, &prev_txs, &[0])
+            .sign_tx(
+                0,
+                variant,
+                false,
+                &unsigned,
+                signing_lock_size,
+                &prev_txs,
+                &[0],
+            )
             .expect("sign_tx on device");
         (signed, digest, addr.pubkey)
     });
 
     // Witness lock = [0x80,0x00,0x01,0x01,flag] || pubkey(32) || signature.
     let lock_blob = signed.witness_lock;
-    assert!(lock_blob.len() > 5 + 32, "witness lock too short: {}", lock_blob.len());
+    assert!(
+        lock_blob.len() > 5 + 32,
+        "witness lock too short: {}",
+        lock_blob.len()
+    );
     assert_eq!(&lock_blob[5..5 + 32], pubkey.as_slice(), "witness pubkey");
     let sig = &lock_blob[5 + 32..];
 
     let ok = qpv2_core::KeyVault::raw_verify(variant, &pubkey, &digest, sig).expect("raw_verify");
     assert!(ok, "device signature must verify against the host digest");
-    println!("sign_tx OK: {}-byte witness lock; signature verifies", lock_blob.len());
+    println!(
+        "sign_tx OK: {}-byte witness lock; signature verifies",
+        lock_blob.len()
+    );
 }

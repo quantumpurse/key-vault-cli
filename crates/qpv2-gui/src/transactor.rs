@@ -621,8 +621,7 @@ impl App {
 
         std::thread::spawn(move || {
             let result = (|| -> Result<String, String> {
-                let sign_group: Vec<u32> =
-                    (0..unsigned_tx.inputs().len() as u32).collect();
+                let sign_group: Vec<u32> = (0..unsigned_tx.inputs().len() as u32).collect();
 
                 let prev_txs =
                     ckb_node::wallet_helpers::tx_builder::fetch_prev_txs(&qp_client, &unsigned_tx)
