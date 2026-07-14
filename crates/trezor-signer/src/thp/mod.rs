@@ -74,7 +74,7 @@ impl ThpSession {
                 "channel allocation failed".into(),
             ));
         }
-        let mut client = client.map(|c| c.complete(NullCredentialStore).expect("channel complete"));
+        let mut client = client.try_map(|c| c.complete(NullCredentialStore))?;
 
         // 2. Noise handshake (device properties carry the protocol version).
         client.device_properties = client.channel.device_properties().into();
@@ -91,7 +91,7 @@ impl ThpSession {
         if !client.channel.handshake_done() {
             return Err(TrezorSignerError::Protocol("handshake failed".into()));
         }
-        let mut client = client.map(|c| c.complete().expect("handshake complete"));
+        let mut client = client.try_map(|c| c.complete())?;
 
         // 3. Pairing — the emulator/host pair is unauthenticated (skip-pairing).
         do_pairing(&mut client, &props)?;

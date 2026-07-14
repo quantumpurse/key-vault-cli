@@ -59,13 +59,23 @@ where
 }
 
 impl<C: ChannelIO> Client<C> {
-    pub fn map<D>(self, func: impl FnOnce(C) -> D) -> Client<D> {
-        Client {
-            channel: self.channel.map(|c| Ok(func(c))).unwrap(),
+    /// Transition the channel to a new state, propagating any failure. Used for
+    /// the fallible `complete` steps of the handshake. (`trezor_thp::Error` does
+    /// not implement `Debug`/`Display` in release builds, so it is discarded.)
+    pub fn try_map<D>(
+        self,
+        func: impl FnOnce(C) -> Result<D, trezor_thp::Error>,
+    ) -> Result<Client<D>, TrezorSignerError> {
+        let channel = self
+            .channel
+            .map(func)
+            .map_err(|_| TrezorSignerError::Protocol("THP channel transition failed".into()))?;
+        Ok(Client {
+            channel,
             device_properties: self.device_properties,
             socket: self.socket,
             emu_addr: self.emu_addr,
-        }
+        })
     }
 
     fn send_to(&mut self, buf: &[u8]) -> Result<(), TrezorSignerError> {
@@ -100,7 +110,7 @@ impl<C: ChannelIO> Client<C> {
     fn write_ack(&mut self) -> Result<Vec<u8>, TrezorSignerError> {
         self.channel
             .packet_out()
-            .map_err(|e| TrezorSignerError::Protocol(format!("packet_out: {e:?}")))
+            .map_err(|_| TrezorSignerError::Protocol("THP packet_out failed".into()))
     }
 
     fn read_ack(&mut self, packet: &[u8]) -> Result<bool, TrezorSignerError> {
@@ -108,7 +118,7 @@ impl<C: ChannelIO> Client<C> {
             .channel
             .packet_in(packet)
             .check_failed()
-            .map_err(|e| TrezorSignerError::Protocol(format!("packet_in: {e:?}")))?;
+            .map_err(|_| TrezorSignerError::Protocol("THP packet_in failed".into()))?;
         if let PacketInResult::TransportError { error } = &pir {
             return Err(transport_err(error));
         }
@@ -123,7 +133,7 @@ impl<C: ChannelIO> Client<C> {
     ) -> Result<(), TrezorSignerError> {
         self.channel
             .message_in(sid, message_type, message)
-            .map_err(|e| TrezorSignerError::Protocol(format!("message_in: {e:?}")))?;
+            .map_err(|_| TrezorSignerError::Protocol("THP message_in failed".into()))?;
 
         let mut acked = false;
         while !acked {
@@ -138,8 +148,8 @@ impl<C: ChannelIO> Client<C> {
             while !acked {
                 match self.recv_from(ACK_TIMEOUT)? {
                     None => {
-                        self.channel.message_retransmit().map_err(|e| {
-                            TrezorSignerError::Protocol(format!("retransmit: {e:?}"))
+                        self.channel.message_retransmit().map_err(|_| {
+                            TrezorSignerError::Protocol("THP retransmit failed".into())
                         })?;
                         break;
                     }
@@ -167,7 +177,7 @@ impl<C: ChannelIO> Client<C> {
                     .channel
                     .packet_in(&packet)
                     .check_failed()
-                    .map_err(|e| TrezorSignerError::Protocol(format!("packet_in: {e:?}")))?;
+                    .map_err(|_| TrezorSignerError::Protocol("THP packet_in failed".into()))?;
                 if let PacketInResult::TransportError { error } = &pir {
                     return Err(transport_err(error));
                 }
@@ -177,7 +187,7 @@ impl<C: ChannelIO> Client<C> {
             result = Some(
                 self.channel
                     .message_out()
-                    .map_err(|e| TrezorSignerError::Protocol(format!("message_out: {e:?}")))?,
+                    .map_err(|_| TrezorSignerError::Protocol("THP message_out failed".into()))?,
             );
         }
         if send_ack {
