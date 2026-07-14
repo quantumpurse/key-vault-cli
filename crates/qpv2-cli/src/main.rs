@@ -898,14 +898,16 @@ fn handle_transfer(
     let message = ckb_node::compute_signing_message(&unsigned_tx, &input_cells, 0)
         .map_err(|e| format!("Failed to compute tx message: {}", e))?;
 
-    let auth = get_auth_key(wallet_id)?;
-    let variant = KeyVault::get_spx_variant(wallet_id)?;
-    let vault = KeyVault::new(variant, wallet_id);
-
-    let signature_bytes = vault.ckb_sign(auth, lock_args.to_string(), message.to_vec())?;
-
-    let signed_tx = ckb_node::fill_witness(unsigned_tx, 0, signature_bytes)
-        .map_err(|e| format!("Failed to fill witness: {}", e))?;
+    let signed_tx = if KeyVault::is_device_backed(wallet_id) {
+        sign_transfer_with_trezor(&account, &qp_client, is_mainnet, unsigned_tx)?
+    } else {
+        let auth = get_auth_key(wallet_id)?;
+        let variant = KeyVault::get_spx_variant(wallet_id)?;
+        let vault = KeyVault::new(variant, wallet_id);
+        let signature_bytes = vault.ckb_sign(auth, lock_args.to_string(), message.to_vec())?;
+        ckb_node::fill_witness(unsigned_tx, 0, signature_bytes)
+            .map_err(|e| format!("Failed to fill witness: {}", e))?
+    };
 
     println!("Submitting transaction...");
     let tx_hash = ckb_node::wallet_helpers::tx_builder::send_transaction(&qp_client, &signed_tx)
@@ -913,6 +915,40 @@ fn handle_transfer(
 
     println!("Transaction submitted: {:#x}", tx_hash);
     Ok(())
+}
+
+/// Sign a single-sig transfer with a Trezor device: stream the transaction (and
+/// its previous transactions) to the device and fill the returned witness lock.
+fn sign_transfer_with_trezor(
+    account: &qpv2_core::types::SphincsPlusAccount,
+    qp_client: &ckb_node::QpClient,
+    is_mainnet: bool,
+    unsigned_tx: ckb_types::core::TransactionView,
+) -> Result<ckb_types::core::TransactionView, String> {
+    println!("Fetching previous transactions for the device...");
+    let prev_txs = ckb_node::wallet_helpers::tx_builder::fetch_prev_txs(qp_client, &unsigned_tx)
+        .map_err(|e| format!("Failed to fetch previous transactions: {}", e))?;
+
+    let variant = account.config.signers[0].variant;
+    let sign_group: Vec<u32> = (0..unsigned_tx.inputs().len() as u32).collect();
+
+    println!("Confirm the transaction on your Trezor...");
+    let mut device =
+        trezor_signer::open().map_err(|e| format!("Could not connect to Trezor: {}", e))?;
+    let signed = device
+        .sign_tx(
+            account.index,
+            variant,
+            is_mainnet,
+            &unsigned_tx,
+            account.config.max_witness_lock_size(),
+            &prev_txs,
+            &sign_group,
+        )
+        .map_err(|e| format!("Trezor signing failed: {}", e))?;
+
+    ckb_node::fill_witness(unsigned_tx, 0, signed.witness_lock)
+        .map_err(|e| format!("Failed to fill witness: {}", e))
 }
 
 /// Shared context for the multisig `build-*` CLI handlers: the wallet,
