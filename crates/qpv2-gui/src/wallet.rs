@@ -535,6 +535,11 @@ impl App {
     }
 
     pub(crate) fn create_singlesig_account(&mut self) {
+        if KeyVault::is_device_backed(self.wallet_id) {
+            self.create_device_account();
+            return;
+        }
+
         let auth = match self.resolve_auth_key("create a new account") {
             Ok(a) => a,
             Err(e) => {
@@ -577,6 +582,69 @@ impl App {
                 self.status = Status::Error(msg);
             }
         }
+    }
+
+    /// Import the next account (index = current account count) from a connected
+    /// Trezor. Accounts are contiguous from index 0, so position equals index.
+    fn create_device_account(&mut self) {
+        let variant = match KeyVault::get_spx_variant(self.wallet_id) {
+            Ok(v) => v,
+            Err(e) => {
+                let msg = format!("Failed to read wallet variant: {}", e);
+                tracing::error!("{}", msg);
+                self.status = Status::Error(msg);
+                return;
+            }
+        };
+        let next_index = self.accounts.len() as u32;
+        let is_mainnet = self.qp_client.is_mainnet();
+
+        let mut device = match trezor_signer::open() {
+            Ok(d) => d,
+            Err(e) => {
+                let msg = format!("Could not connect to Trezor: {}", e);
+                tracing::error!("{}", msg);
+                self.status = Status::Error(msg);
+                return;
+            }
+        };
+
+        let addr = match device.get_address(next_index, variant, is_mainnet, true) {
+            Ok(a) => a,
+            Err(e) => {
+                let msg = format!("Failed to import account {} from Trezor: {}", next_index, e);
+                tracing::error!("{}", msg);
+                self.status = Status::Error(msg);
+                return;
+            }
+        };
+
+        let config = qpv2_core::types::MultisigConfig::single_sig(
+            variant,
+            addr.pubkey,
+            trezor_signer::TREZOR_CONVENTION,
+        );
+        let account = qpv2_core::types::SphincsPlusAccount {
+            index: next_index,
+            lock_args: hex::encode(&addr.lock_args),
+            config,
+            initiating_signer_lock_args: None,
+        };
+
+        if let Err(e) = qpv2_core::db::add_singlesig_account(self.wallet_id, account.clone()) {
+            let msg = format!("Failed to store account: {}", e);
+            tracing::error!("{}", msg);
+            self.status = Status::Error(msg);
+            return;
+        }
+
+        self.balances.insert(account.lock_args.clone(), Some(0));
+        self.spendable_balances
+            .insert(account.lock_args.clone(), Some(0));
+        self.register_lock_scripts_with_light_client(std::slice::from_ref(&account.lock_args));
+        self.accounts.push(account);
+        self.refresh_wallet_cache();
+        self.status = Status::Info("New Trezor account imported!".to_string());
     }
 
     pub(crate) fn import_seed_phrase_with_password(
@@ -748,6 +816,79 @@ impl App {
         self.finalize_wallet_setup(
             AuthMethod::Keychain,
             &format!("Wallet created with {}!", keychain::short_name()),
+            wallet_id,
+            wallet_name,
+        );
+    }
+
+    /// Connect a Trezor and import its accounts as a new watch-only wallet.
+    ///
+    /// The device is queried for `account_count` addresses (indices 0..N),
+    /// each shown on the device for confirmation, and stored as single-sig
+    /// accounts with no vault seed. Signing later streams transactions to the
+    /// device. The connect/import round-trip is synchronous and blocks the UI
+    /// briefly while the user confirms on the device.
+    pub(crate) fn create_wallet_with_trezor(&mut self, variant: SpxVariant, account_count: u32) {
+        // Connect and import before allocating a wallet id, so a device
+        // failure leaves no empty wallet behind.
+        let mut device = match trezor_signer::open() {
+            Ok(d) => d,
+            Err(e) => {
+                let msg = format!("Could not connect to Trezor: {}", e);
+                tracing::error!("{}", msg);
+                self.status = Status::Error(msg);
+                return;
+            }
+        };
+        let model = device.model();
+        let is_mainnet = self.qp_client.is_mainnet();
+
+        let mut accounts = Vec::with_capacity(account_count as usize);
+        for i in 0..account_count {
+            match device.get_address(i, variant, is_mainnet, true) {
+                Ok(addr) => {
+                    let config = qpv2_core::types::MultisigConfig::single_sig(
+                        variant,
+                        addr.pubkey,
+                        trezor_signer::TREZOR_CONVENTION,
+                    );
+                    accounts.push(qpv2_core::types::SphincsPlusAccount {
+                        index: i,
+                        lock_args: hex::encode(&addr.lock_args),
+                        config,
+                        initiating_signer_lock_args: None,
+                    });
+                }
+                Err(e) => {
+                    let msg = format!("Failed to import account {} from Trezor: {}", i, e);
+                    tracing::error!("{}", msg);
+                    self.status = Status::Error(msg);
+                    return;
+                }
+            }
+        }
+
+        let (wallet_id, wallet_name) = match self.prepare_new_wallet() {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("{}", e);
+                self.status = Status::Error(e);
+                return;
+            }
+        };
+
+        if let Err(e) =
+            KeyVault::create_device_wallet(wallet_id, &wallet_name, variant, &model, accounts)
+        {
+            let msg = format!("Failed to create Trezor wallet: {}", e);
+            tracing::error!("{}", msg);
+            self.status = Status::Error(msg);
+            return;
+        }
+
+        self.finalize_wallet_setup(
+            AuthMethod::Trezor { model },
+            "Trezor wallet connected!",
             wallet_id,
             wallet_name,
         );

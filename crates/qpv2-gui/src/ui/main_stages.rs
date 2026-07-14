@@ -559,7 +559,12 @@ impl App {
                         self.draw_auth_row(ui, panel_w - 30.0, false);
 
                         ui.add_space(16.0);
-                        section_header(ui, &self.colors, "03", "Restore From Seed Phrase");
+                        section_header(ui, &self.colors, "03", "Connect Hardware Wallet");
+                        ui.add_space(8.0);
+                        self.draw_trezor_connect_button(ui, panel_w - 30.0);
+
+                        ui.add_space(16.0);
+                        section_header(ui, &self.colors, "04", "Restore From Seed Phrase");
                         ui.add_space(8.0);
                         // v1 web-wallet mnemonics derive the same keys but
                         // need the v1 single-sig address format for existing
@@ -664,6 +669,16 @@ impl App {
             if row < 2 {
                 ui.add_space(gap);
             }
+        }
+    }
+
+    /// A single full-width button that imports accounts from a connected
+    /// Trezor as a new watch-only wallet.
+    fn draw_trezor_connect_button(&mut self, ui: &mut egui::Ui, width: f32) {
+        let size = egui::vec2(width, 34.0);
+        let btn = ghost_button(&self.colors, "Connect Trezor", size);
+        if ui.add(btn).clicked() {
+            self.create_wallet_with_trezor(self.selected_variant, 1);
         }
     }
 
