@@ -11,14 +11,18 @@
 use std::collections::HashMap;
 
 use ckb_types::{core::TransactionView, H256};
-use protobuf::MessageField;
+use protobuf::{Enum, Message, MessageField};
 use trezor_client::protos::{self, CKBTxRequestType};
-use trezor_client::{client::handle_interaction, Trezor, TrezorMessage};
+use trezor_client::TrezorMessage;
 
-use crate::device::{client_err, network_name, TrezorDevice};
+use crate::device::{network_name, TrezorDevice};
+use crate::thp::ThpSession;
 use crate::TrezorSignerError;
 
 use qpv2_core::types::SpxVariant;
+
+/// Wire message-type id of the device's `CKBTxRequest` reply.
+const MSG_CKB_TX_REQUEST: u16 = 5503;
 
 /// The result of a device signing round-trip.
 #[derive(Debug, Clone)]
@@ -68,7 +72,7 @@ impl TrezorDevice {
         kickoff.set_witnesses_count(witnesses_count as u32);
         kickoff.sign_group_input_indices = sign_group_input_indices.to_vec();
 
-        let mut request = call(&mut self.inner, kickoff)?;
+        let mut request = call(&mut self.session, kickoff)?;
         let mut sig_buf: Vec<u8> = Vec::new();
         let mut tx_hash = [0u8; 32];
 
@@ -87,19 +91,19 @@ impl TrezorDevice {
                     let idx = request_index(&request)?;
                     let mut ack = protos::CKBTxAckInput::new();
                     ack.input = MessageField::some(nth(&inputs, idx, "input")?);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXOUTPUT => {
                     let idx = request_index(&request)?;
                     let mut ack = protos::CKBTxAckOutput::new();
                     ack.output = MessageField::some(nth(&outputs, idx, "output")?);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXCELLDEP => {
                     let idx = request_index(&request)?;
                     let mut ack = protos::CKBTxAckCellDep::new();
                     ack.cell_dep = MessageField::some(nth(&cell_deps, idx, "cell_dep")?);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXWITNESS => {
                     let idx = request_index(&request)?;
@@ -116,7 +120,7 @@ impl TrezorDevice {
                     } else {
                         ack.set_raw(raw.to_vec());
                     }
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXPREVMETA => {
                     let prev = prev_lookup(prev_txs, &request_tx_hash(&request)?)?;
@@ -126,7 +130,7 @@ impl TrezorDevice {
                     ack.set_outputs_count(prev.outputs().len() as u32);
                     ack.set_cell_deps_count(prev.cell_deps().len() as u32);
                     ack.header_deps = crate::conv::header_deps_of(prev);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXPREVINPUT => {
                     let prev = prev_lookup(prev_txs, &request_tx_hash(&request)?)?;
@@ -134,7 +138,7 @@ impl TrezorDevice {
                     let inputs = crate::conv::inputs_of(prev);
                     let mut ack = protos::CKBTxAckInput::new();
                     ack.input = MessageField::some(nth(&inputs, idx, "prev input")?);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXPREVOUTPUT => {
                     let prev = prev_lookup(prev_txs, &request_tx_hash(&request)?)?;
@@ -142,7 +146,7 @@ impl TrezorDevice {
                     let outputs = crate::conv::outputs_of(prev);
                     let mut ack = protos::CKBTxAckOutput::new();
                     ack.output = MessageField::some(nth(&outputs, idx, "prev output")?);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXPREVCELLDEP => {
                     let prev = prev_lookup(prev_txs, &request_tx_hash(&request)?)?;
@@ -150,7 +154,7 @@ impl TrezorDevice {
                     let cell_deps = crate::conv::cell_deps_of(prev);
                     let mut ack = protos::CKBTxAckCellDep::new();
                     ack.cell_dep = MessageField::some(nth(&cell_deps, idx, "prev cell_dep")?);
-                    request = call(&mut self.inner, ack)?;
+                    request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXSIGCHUNK => {
                     let details = request
@@ -170,7 +174,7 @@ impl TrezorDevice {
                         )));
                     }
                     sig_buf.extend_from_slice(&chunk);
-                    request = call(&mut self.inner, protos::CKBTxAckSigChunk::new())?;
+                    request = call(&mut self.session, protos::CKBTxAckSigChunk::new())?;
                 }
             }
         }
@@ -186,17 +190,26 @@ impl TrezorDevice {
     }
 }
 
-/// Send a message and return the next `CKBTxRequest`, auto-acking any
-/// `ButtonRequest` the device raises while it waits for the user.
-fn call<S: TrezorMessage>(
-    dev: &mut Trezor,
+/// Send a CKB message over the THP session (its wire type comes from the
+/// message itself) and decode the device's next `CKBTxRequest`. `ButtonRequest`s
+/// are auto-acknowledged inside the session.
+fn call<S: TrezorMessage + Message>(
+    session: &mut ThpSession,
     msg: S,
 ) -> Result<protos::CKBTxRequest, TrezorSignerError> {
-    handle_interaction(
-        dev.call(msg, Box::new(|_, m: protos::CKBTxRequest| Ok(m)))
-            .map_err(client_err)?,
-    )
-    .map_err(client_err)
+    let message_type = u16::try_from(S::MESSAGE_TYPE.value())
+        .map_err(|_| protocol("message type out of range".to_string()))?;
+    let bytes = msg
+        .write_to_bytes()
+        .map_err(|e| protocol(format!("encode message: {e}")))?;
+    let (reply_type, reply) = session.call_ckb(message_type, &bytes)?;
+    if reply_type != MSG_CKB_TX_REQUEST {
+        return Err(protocol(format!(
+            "expected CKBTxRequest reply, got type {reply_type}"
+        )));
+    }
+    protos::CKBTxRequest::parse_from_bytes(&reply)
+        .map_err(|e| protocol(format!("decode CKBTxRequest: {e}")))
 }
 
 fn protocol(msg: String) -> TrezorSignerError {

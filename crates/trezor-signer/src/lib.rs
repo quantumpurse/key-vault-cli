@@ -15,6 +15,7 @@ mod conv;
 mod device;
 mod error;
 mod stream;
+mod thp;
 
 pub use device::{list_devices, open, DeviceAddress, DeviceInfo, TrezorDevice, TREZOR_CONVENTION};
 pub use error::TrezorSignerError;
