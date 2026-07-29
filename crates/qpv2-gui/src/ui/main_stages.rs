@@ -517,10 +517,10 @@ impl App {
         let panel_w = 680.0;
 
         ui.vertical_centered(|ui| {
-            ui.add_space(32.0);
+            ui.add_space(15.0);
 
             // The qp∞ mark at full size — the one place it gets room.
-            let (logo, _) = ui.allocate_exact_size(egui::vec2(42.0, 42.0), egui::Sense::hover());
+            let (logo, _) = ui.allocate_exact_size(egui::vec2(36.0, 36.0), egui::Sense::hover());
             draw_qp_logo_chip(ui.painter(), logo, self.colors.accent, self.colors.bg);
             ui.add_space(10.0);
 
@@ -530,42 +530,45 @@ impl App {
                     .color(self.colors.text_muted),
             );
 
-            ui.add_space(20.0);
+            ui.add_space(15.0);
 
             ui.allocate_ui_with_layout(
                 egui::vec2(panel_w, 0.0),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
+                    // Each section sits in its own panel with the dark
+                    // background showing between them, so the areas read
+                    // as separate blocks rather than one run-on column
+                    // under tiny headers.
+                    let gap = 10.0;
+                    let inner_w = panel_w - 30.0;
+
                     panel_frame(&self.colors).show(ui, |ui| {
-                        ui.set_width(panel_w - 30.0);
-
-                        boot_lines(
-                            ui,
-                            "setup-boot",
-                            "> SPHINCS+ SIGNATURE SUITE ............ READY\n\
-                             > SCANNING FOR LOCAL VAULT ............ NONE FOUND\n\
-                             > SELECT PARAMETER SET AND INITIALIZE",
-                            90.0,
-                            11.0,
-                            self.colors.text_muted,
-                        );
-                        ui.add_space(14.0);
-
+                        ui.set_width(inner_w);
                         section_header(ui, &self.colors, "01", "Parameter Set");
                         ui.add_space(8.0);
-                        self.draw_variant_grid(ui, panel_w - 30.0);
+                        self.draw_variant_grid(ui, inner_w);
+                    });
+                    ui.add_space(gap);
 
-                        ui.add_space(16.0);
-                        section_header(ui, &self.colors, "02", "Create New Vault");
+                    panel_frame(&self.colors).show(ui, |ui| {
+                        ui.set_width(inner_w);
+                        section_header(ui, &self.colors, "02", "Create New Wallet");
                         ui.add_space(8.0);
-                        self.draw_auth_row(ui, panel_w - 30.0, false);
+                        self.draw_auth_row(ui, inner_w, false);
+                    });
+                    ui.add_space(gap);
 
-                        ui.add_space(16.0);
+                    panel_frame(&self.colors).show(ui, |ui| {
+                        ui.set_width(inner_w);
                         section_header(ui, &self.colors, "03", "Connect Hardware Wallet");
                         ui.add_space(8.0);
-                        self.draw_trezor_connect_button(ui, panel_w - 30.0);
+                        self.draw_trezor_connect_button(ui, inner_w);
+                    });
+                    ui.add_space(gap);
 
-                        ui.add_space(16.0);
+                    panel_frame(&self.colors).show(ui, |ui| {
+                        ui.set_width(inner_w);
                         section_header(ui, &self.colors, "04", "Restore From Seed Phrase");
                         ui.add_space(8.0);
                         // v1 web-wallet mnemonics derive the same keys but
@@ -573,7 +576,7 @@ impl App {
                         // funds to stay visible.
                         v1_import_checkbox(ui, &self.colors, &mut self.import_from_v1);
                         ui.add_space(8.0);
-                        self.draw_auth_row(ui, panel_w - 30.0, true);
+                        self.draw_auth_row(ui, inner_w, true);
                     });
                 },
             );
@@ -589,7 +592,8 @@ impl App {
         });
     }
 
-    /// 4×3 grid of SPHINCS+ parameter-set cells.
+    /// 6×2 table of SPHINCS+ parameter-set cells with shared hairline
+    /// borders, so the picker reads as one unit instead of twelve chips.
     fn draw_variant_grid(&mut self, ui: &mut egui::Ui, width: f32) {
         const VARIANTS: [SpxVariant; 12] = [
             SpxVariant::Sha2128S,
@@ -606,70 +610,88 @@ impl App {
             SpxVariant::Shake256F,
         ];
 
-        let gap = 6.0;
-        let cell_w = (width - 3.0 * gap) / 4.0;
-        let cell_h = 30.0;
+        let cell_w = width / 6.0;
+        let cell_h = 24.0;
 
-        for row in 0..3 {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = gap;
-                for col in 0..4 {
-                    let variant = VARIANTS[row * 4 + col];
-                    let selected = self.selected_variant == variant;
-                    let (rect, response) =
-                        ui.allocate_exact_size(egui::vec2(cell_w, cell_h), egui::Sense::click());
-                    if response.clicked() {
-                        self.selected_variant = variant;
-                    }
+        let (grid, response) =
+            ui.allocate_exact_size(egui::vec2(width, 2.0 * cell_h), egui::Sense::click());
 
-                    let painter = ui.painter();
-                    let (hash, param) = variant_parts(variant);
+        let cell_rect = |row: usize, col: usize| {
+            egui::Rect::from_min_size(
+                grid.min + egui::vec2(col as f32 * cell_w, row as f32 * cell_h),
+                egui::vec2(cell_w, cell_h),
+            )
+        };
+        let cell_at = |pos: egui::Pos2| {
+            let rel = pos - grid.min;
+            (
+                ((rel.y / cell_h).floor() as usize).min(1),
+                ((rel.x / cell_w).floor() as usize).min(5),
+            )
+        };
 
-                    if selected {
-                        painter.rect_filled(rect, 0.0, self.colors.accent_tint);
-                        painter.rect_stroke(
-                            rect,
-                            0.0,
-                            egui::Stroke::new(1.0, self.colors.accent),
-                            egui::StrokeKind::Inside,
-                        );
-                    } else {
-                        painter.rect_stroke(
-                            rect,
-                            0.0,
-                            egui::Stroke::new(
-                                1.0,
-                                if response.hovered() {
-                                    self.colors.border2
-                                } else {
-                                    self.colors.border
-                                },
-                            ),
-                            egui::StrokeKind::Inside,
-                        );
-                    }
-                    if response.hovered() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                    }
+        let hovered = response.hover_pos().map(cell_at);
+        if hovered.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if response.clicked() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let (row, col) = cell_at(pos);
+                self.selected_variant = VARIANTS[row * 6 + col];
+            }
+        }
 
-                    let text_color = if selected {
-                        self.colors.accent
-                    } else if response.hovered() {
-                        self.colors.text
-                    } else {
-                        self.colors.text_muted
-                    };
-                    painter.text(
-                        rect.center(),
-                        egui::Align2::CENTER_CENTER,
-                        format!("{}-{}", hash, param),
-                        label_font(10.0),
-                        text_color,
+        let painter = ui.painter();
+
+        // Shared interior hairlines plus one outer border, so cells
+        // form a contiguous table instead of separated chips.
+        let hairline = egui::Stroke::new(1.0, self.colors.border);
+        for col in 1..6 {
+            let x = grid.left() + col as f32 * cell_w;
+            painter.vline(x, grid.y_range(), hairline);
+        }
+        painter.hline(grid.x_range(), grid.center().y, hairline);
+        painter.rect_stroke(grid, 0.0, hairline, egui::StrokeKind::Inside);
+
+        for row in 0..2 {
+            for col in 0..6 {
+                let variant = VARIANTS[row * 6 + col];
+                let selected = self.selected_variant == variant;
+                let is_hovered = hovered == Some((row, col));
+                let rect = cell_rect(row, col);
+
+                if selected {
+                    painter.rect_filled(rect, 0.0, self.colors.accent_tint);
+                    painter.rect_stroke(
+                        rect,
+                        0.0,
+                        egui::Stroke::new(1.0, self.colors.accent),
+                        egui::StrokeKind::Inside,
+                    );
+                } else if is_hovered {
+                    painter.rect_stroke(
+                        rect,
+                        0.0,
+                        egui::Stroke::new(1.0, self.colors.border2),
+                        egui::StrokeKind::Inside,
                     );
                 }
-            });
-            if row < 2 {
-                ui.add_space(gap);
+
+                let (hash, param) = variant_parts(variant);
+                let text_color = if selected {
+                    self.colors.accent
+                } else if is_hovered {
+                    self.colors.text
+                } else {
+                    self.colors.text_muted
+                };
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    format!("{}-{}", hash, param),
+                    label_font(10.0),
+                    text_color,
+                );
             }
         }
     }
@@ -678,10 +700,12 @@ impl App {
     /// Trezor as a new watch-only wallet.
     fn draw_trezor_connect_button(&mut self, ui: &mut egui::Ui, width: f32) {
         let size = egui::vec2(width, 34.0);
-        let btn = ghost_button(&self.colors, "Connect Trezor", size);
-        if ui.add(btn).clicked() {
-            self.create_wallet_with_trezor(self.selected_variant, 1);
-        }
+        ui.horizontal(|ui| {
+            let btn = ghost_button(&self.colors, "Connect Trezor", size);
+            if ui.add(btn).clicked() {
+                self.create_wallet_with_trezor(self.selected_variant, 1);
+            }
+        });
     }
 
     /// One row of three auth-method buttons (create or import).
