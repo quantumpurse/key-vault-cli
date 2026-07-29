@@ -577,10 +577,9 @@ fn draw_tape_row(
     // wallet's own coins; withdraw returns them) stay within the
     // wallet, so none read as an outgoing payment.
     let (prefix, amount_color) = match record.tx_kind {
-        TxKind::SelfTransfer
-        | TxKind::DaoDeposit
-        | TxKind::DaoPrepare
-        | TxKind::DaoWithdraw => ("", colors.text),
+        TxKind::SelfTransfer | TxKind::DaoDeposit | TxKind::DaoPrepare | TxKind::DaoWithdraw => {
+            ("", colors.text)
+        }
         TxKind::Incoming => ("+", colors.accent2),
         TxKind::Outgoing => ("\u{2212}", colors.danger),
     };
