@@ -333,8 +333,19 @@ pub(crate) fn finish_credential_phase(
 }
 
 /// Run the pairing phase on a freshly handshaken channel whose state is
-/// `Unpaired`: skip-pairing when the firmware allows it (emulator, debug
-/// builds), CodeEntry otherwise.
+/// `Unpaired`.
+///
+/// The device advertises its methods in preference order and we take the
+/// first, as Suite does (`packages/connect/src/device/thp/pairing.ts`). That
+/// is always `CodeEntry` in practice: it is the only entry in the firmware's
+/// `_DEFAULT_ENABLED_PAIRING_METHODS`, and debug builds merely append
+/// `SkipPairing`/`NFC`/`QrCode` after it.
+///
+/// Deliberately *not* preferring `SkipPairing` when it is on offer: the
+/// firmware's skip branch ends the session without issuing a credential
+/// (`apps/thp/pairing.py`, `_end_pairing`), so every later connect would
+/// arrive unpaired and prompt to pair again. One code entry against the
+/// emulator buys the same quiet reconnects a real device gets.
 pub(crate) fn run_pairing(
     client: &mut Client<Channel<RustCrypto>>,
     props: &ThpDeviceProperties,
@@ -346,6 +357,18 @@ pub(crate) fn run_pairing(
         .iter()
         .filter_map(|p| p.enum_value().ok())
         .collect();
+    let selected = *methods.first().ok_or_else(|| {
+        TrezorSignerError::Client("the device advertised no pairing method".into())
+    })?;
+    if !matches!(
+        selected,
+        ThpPairingMethod::CodeEntry | ThpPairingMethod::SkipPairing
+    ) {
+        return Err(TrezorSignerError::Client(format!(
+            "the device's preferred pairing method ({selected:?}) is not one \
+             QuantumPurse supports (code entry)"
+        )));
+    }
 
     let mut request = ThpPairingRequest::new();
     request.set_host_name("QuantumPurse".into());
@@ -356,7 +379,10 @@ pub(crate) fn run_pairing(
         ThpMessageType::ThpMessageType_ThpPairingRequestApproved,
     )?;
 
-    if methods.contains(&ThpPairingMethod::SkipPairing) {
+    if selected == ThpPairingMethod::SkipPairing {
+        // Only reachable on firmware that puts skip first — no credential is
+        // issued, so this connection is paired but the next one will not be.
+        log::warn!("device prefers skip-pairing; it will ask to pair again next connect");
         let mut select = ThpSelectMethod::new();
         select.set_selected_pairing_method(ThpPairingMethod::SkipPairing);
         let _end: ThpEndResponse = client.call_pb(
@@ -365,12 +391,6 @@ pub(crate) fn run_pairing(
             ThpMessageType::ThpMessageType_ThpEndResponse,
         )?;
         return Ok(());
-    }
-
-    if !methods.contains(&ThpPairingMethod::CodeEntry) {
-        return Err(TrezorSignerError::Client(
-            "the device offers no pairing method QuantumPurse supports (code entry)".into(),
-        ));
     }
 
     code_entry(client, ux, identity)

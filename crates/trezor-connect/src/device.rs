@@ -133,10 +133,13 @@ pub fn open_device(
     open_transport(transport, ux)
 }
 
-/// Open the local firmware emulator on the default port. Dev builds of the
-/// emulator advertise skip-pairing, so no interaction is needed; a
-/// production-build emulator would demand code entry, which [`NoInteraction`]
-/// turns into a clear error.
+/// Open the local firmware emulator on the default port, without a pairing UX.
+///
+/// Requires an emulator this host has already paired with: pairing takes the
+/// device's preferred method, which is code entry, and [`NoInteraction`] turns
+/// that into a clear error rather than blocking. Pair once by hand (the GUI, or
+/// the `thp_get_address` example) and the stored credential keeps every later
+/// call here unattended.
 pub fn open_emulator() -> Result<TrezorDevice, TrezorSignerError> {
     open_transport(emulator_transport(EMULATOR_PORT)?, &mut NoInteraction)
 }
