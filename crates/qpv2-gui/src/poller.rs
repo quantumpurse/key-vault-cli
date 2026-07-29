@@ -575,6 +575,36 @@ impl App {
         }
     }
 
+    /// Pick up the accounts read from a Trezor by `create_wallet_with_trezor`
+    /// and turn them into a wallet. Runs on every screen, unlike the balance
+    /// pollers: the import starts on the setup screen and is what moves us
+    /// off it.
+    pub(crate) fn poll_trezor_import(&mut self) {
+        let rx = match &self.trezor_import_rx {
+            Some(rx) => rx,
+            None => return,
+        };
+
+        match rx.try_recv() {
+            Ok(Ok((model, variant, accounts))) => {
+                self.trezor_import_rx = None;
+                self.finish_trezor_import(model, variant, accounts);
+            }
+            Ok(Err(e)) => {
+                self.trezor_import_rx = None;
+                tracing::error!("{}", e);
+                self.status = Status::Error(e);
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.trezor_import_rx = None;
+                let msg = "Trezor import thread terminated unexpectedly.".to_string();
+                tracing::error!("{}", msg);
+                self.status = Status::Error(msg);
+            }
+        }
+    }
+
     /// Pick up a freshly built QR-lock adoption series. Failures are
     /// logged and rescheduled on the short retry cadence so a transient
     /// public-RPC error doesn't strand the UI in "Querying..." for the

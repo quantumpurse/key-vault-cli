@@ -21,6 +21,12 @@ pub enum TrezorSignerError {
     #[error("protocol error: {0}")]
     Protocol(String),
 
+    /// The device did not answer within the time allowed for this step. Kept
+    /// distinct from [`TrezorSignerError::Protocol`] so callers that know what
+    /// the device was waiting on (a PIN, a confirmation) can say so.
+    #[error("timed out after {0:?} waiting for the Trezor")]
+    Timeout(std::time::Duration),
+
     /// Converting the CKB transaction into the device's protobuf shapes failed.
     #[error("conversion error: {0}")]
     Conversion(String),

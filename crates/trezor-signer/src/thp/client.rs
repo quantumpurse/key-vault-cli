@@ -43,6 +43,17 @@ pub(crate) const READ_TIMEOUT: Duration = Duration::from_secs(60);
 /// involved, so a short bound turns "nothing is listening" into a fast error
 /// instead of a full [`READ_TIMEOUT`] stall.
 pub(crate) const CONNECT_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+/// Read timeout for the Noise handshake steps. Because we ask the device to
+/// unlock itself (see `request_channel` in `thp::ThpSession::connect`), a
+/// locked device holds its handshake reply until the user has typed their PIN
+/// on the device — which can take considerably longer than the confirmations
+/// [`READ_TIMEOUT`] is sized for.
+///
+/// This only bounds *silence*: a cancelled PIN, an unplugged cable, or any
+/// device-sent error arrives immediately and is not waited out. So it is
+/// sized for a user entering a PIN, not for detecting failure — and kept
+/// bounded so a wedged device cannot park the caller forever.
+pub(crate) const UNLOCK_TIMEOUT: Duration = Duration::from_secs(180);
 
 // Wire message-type ids, derived from the generated protobuf enum so they
 // cannot drift from the firmware's `messages.proto`.
@@ -181,10 +192,7 @@ impl<C: ChannelIO> Client<C> {
             let mut done = false;
             while !done {
                 let Some(packet) = self.recv_from(self.read_timeout)? else {
-                    return Err(TrezorSignerError::Protocol(format!(
-                        "timed out waiting for response after {:?}",
-                        self.read_timeout
-                    )));
+                    return Err(TrezorSignerError::Timeout(self.read_timeout));
                 };
                 let pir = self
                     .channel

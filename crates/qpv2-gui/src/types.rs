@@ -259,6 +259,19 @@ impl NodeStatus {
 /// Result type for the node-status background poll.
 pub(crate) type NodeStatusUpdate = Result<NodeStatus, String>;
 
+/// Result of a background Trezor connect + account import: the device model,
+/// the parameter set the accounts were derived under, and the accounts
+/// themselves. The variant travels with the result so the setup screen can
+/// change selection while the device is still being confirmed.
+pub(crate) type TrezorImportUpdate = Result<
+    (
+        String,
+        qpv2_core::types::SpxVariant,
+        Vec<qpv2_core::types::SphincsPlusAccount>,
+    ),
+    String,
+>;
+
 /// Application state machine.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Screen {

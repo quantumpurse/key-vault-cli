@@ -69,14 +69,21 @@ impl ThpSession {
         let mut identity = HostIdentity::load_or_create();
 
         let mut mux = Mux::<RustCrypto>::new();
-        mux.request_channel(false);
+        // `try_to_unlock`: the handshake needs the device's static key, which
+        // lives in locked storage. With the flag clear the firmware answers
+        // `DEVICE_LOCKED` and drops the channel; with it set the firmware shows
+        // its PIN keyboard, waits, and then continues the handshake. Connecting
+        // is always an explicit user action here, so we always ask — an
+        // already-unlocked device skips the prompt and is unaffected.
+        mux.request_channel(true);
         let mut client = Client::open(transport, mux);
 
         // 1. Channel allocation. Probed with a short timeout: a live peer
         // answers in milliseconds with no user interaction, so a dead
         // emulator port or unresponsive device fails in ~2s instead of
-        // stalling the full read timeout. Restored right after — later steps
-        // legitimately wait on on-device confirmations.
+        // stalling the full read timeout. Widened right after — the handshake
+        // may sit waiting on PIN entry, and later steps legitimately wait on
+        // on-device confirmations.
         client.set_read_timeout(client::CONNECT_PROBE_TIMEOUT);
         client.call(0, &[]).map_err(|e| {
             log::debug!("channel allocation failed: {e}");
@@ -86,7 +93,7 @@ impl ThpSession {
                     .to_string(),
             )
         })?;
-        client.set_read_timeout(client::READ_TIMEOUT);
+        client.set_read_timeout(client::UNLOCK_TIMEOUT);
         if !client.channel.channel_alloc_ready() {
             return Err(TrezorSignerError::Protocol(
                 "channel allocation failed".into(),
@@ -104,11 +111,24 @@ impl ThpSession {
             let min = u8::try_from(min).unwrap_or(0);
             client.channel.set_device_protocol_version(maj, min);
         }
-        client.call(0, &[])?;
-        client.call(0, &[])?;
+        // A timeout here means the device went quiet holding its handshake
+        // reply, which is what it does while the PIN keyboard is up — say so
+        // rather than reporting a bare protocol timeout.
+        let unlock_wait = |e: TrezorSignerError| match e {
+            TrezorSignerError::Timeout(_) => TrezorSignerError::Client(
+                "the Trezor was not unlocked in time — unlock it on the device, \
+                 then try again"
+                    .to_string(),
+            ),
+            other => other,
+        };
+        client.call(0, &[]).map_err(unlock_wait)?;
+        client.call(0, &[]).map_err(unlock_wait)?;
         if !client.channel.handshake_done() {
             return Err(TrezorSignerError::Protocol("handshake failed".into()));
         }
+        // Past the unlock gate; the remaining steps only wait on confirmations.
+        client.set_read_timeout(client::READ_TIMEOUT);
         let mut client = client.try_map(|c| c.complete())?;
 
         // 3. Pairing. When the stored credential was accepted the device sits

@@ -36,7 +36,8 @@ pub(crate) const QR_ADOPTION_RETRY: Duration = Duration::from_secs(300);
 use types::{
     AppColors, BalanceChartCache, BalanceResult, DaoQueryResult, DaoView, NodeStatus,
     NodeStatusUpdate, QrAdoptionUpdate, Screen, Series, Status, Tab, TransactionKind,
-    TransactionSendResult, TransactionStatus, TxBuildResult, TxHistoryEvent, TxRecord,
+    TransactionSendResult, TransactionStatus, TrezorImportUpdate, TxBuildResult, TxHistoryEvent,
+    TxRecord,
 };
 
 pub(crate) struct App {
@@ -201,6 +202,11 @@ pub(crate) struct App {
     // (Touch ID button vs none) and per-op routing (Touch ID async
     // flow vs synchronous pinentry prompt).
     pub(crate) auth_method: Option<qpv2_core::types::AuthMethod>,
+    // In-flight Trezor connect + account import kicked off from the setup
+    // screen. Some(_) means the device is being talked to — the connect
+    // button waits and tells the user to look at the device, since a locked
+    // Trezor holds the handshake open until its PIN is entered.
+    pub(crate) trezor_import_rx: Option<mpsc::Receiver<TrezorImportUpdate>>,
     // True when App::new put us into `Screen::Unlocked` directly
     // (password-mode wallet at startup) and the first frame still
     // needs to run the same fetches `unlock_with_passkey_finish` does. Cleared
@@ -488,6 +494,7 @@ impl App {
             // each flow that needs it; cached `None` here. Setup screen
             // doesn't need it; Locked screen reads it before rendering.
             auth_method,
+            trezor_import_rx: None,
             needs_initial_fetch,
             multisig_modal_open: false,
             multisig_local_signer_idx: 0,
@@ -544,6 +551,10 @@ impl eframe::App for App {
         }
 
         self.tick_status(&ctx);
+
+        // Not gated on the screen: this one starts on Setup and is what
+        // moves us off it.
+        self.poll_trezor_import();
 
         if self.screen == Screen::Unlocked {
             self.poll_all_balances();
@@ -620,6 +631,16 @@ impl eframe::App for App {
 
         if async_pending {
             ctx.request_repaint();
+        } else if self.trezor_import_rx.is_some() {
+            // A frame is what checks the channel, so the repaint rate is the
+            // poll rate. This wait is human-paced — someone typing a PIN on
+            // the device — so checking 20 times a second instead of every
+            // frame loses nothing and saves the CPU/GPU of rendering
+            // thousands of identical frames over several minutes. The other
+            // async operations above are network calls that finish in
+            // seconds, where full-rate repaint costs nothing worth a special
+            // case.
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
     }
 }

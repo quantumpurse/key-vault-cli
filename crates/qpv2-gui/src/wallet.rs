@@ -4,7 +4,7 @@ use qpv2_core::types::{AuthKey, AuthMethod, SingleSigConvention, SpxVariant};
 use qpv2_core::KeyVault;
 
 use crate::tx_history::TxHistoryStore;
-use crate::types::{CurrentWallet, Screen, Status, TransactionStatus};
+use crate::types::{CurrentWallet, Screen, Status, TransactionStatus, TrezorImportUpdate};
 use crate::App;
 
 impl App {
@@ -213,6 +213,10 @@ impl App {
         self.transaction_send_rx = None;
         self.node_status_rx = None;
         self.earliest_funding_block_rx = None;
+        // Also cancels a pending Trezor import when the user creates or
+        // switches to another wallet instead of finishing it — otherwise its
+        // late result would create a second wallet and yank the user into it.
+        self.trezor_import_rx = None;
 
         self.tx_history.clear();
         self.unconfirmed_tx_records.clear();
@@ -826,27 +830,36 @@ impl App {
     /// The device is queried for `account_count` addresses (indices 0..N),
     /// each shown on the device for confirmation, and stored as single-sig
     /// accounts with no vault seed. Signing later streams transactions to the
-    /// device. The connect/import round-trip is synchronous and blocks the UI
-    /// briefly while the user confirms on the device.
+    /// device.
+    ///
+    /// Runs on a worker thread: a locked device holds the connect open until
+    /// the user has typed their PIN, and every address needs an on-device
+    /// confirmation after that, so the setup screen has to keep painting to
+    /// tell the user what the device is waiting for. `poll_trezor_import`
+    /// picks up the result and creates the wallet. No-op while an import is
+    /// already in flight.
     pub(crate) fn create_wallet_with_trezor(&mut self, variant: SpxVariant, account_count: u32) {
-        // Connect and import before allocating a wallet id, so a device
-        // failure leaves no empty wallet behind.
-        let mut device = match trezor_signer::open(&mut trezor_signer::PinentryPairing) {
-            Ok(d) => d,
-            Err(e) => {
-                let msg = format!("Could not connect to Trezor: {}", e);
-                tracing::error!("{}", msg);
-                self.status = Status::Error(msg);
-                return;
-            }
-        };
-        let model = device.model();
+        if self.trezor_import_rx.is_some() {
+            return;
+        }
         let is_mainnet = self.qp_client.is_mainnet();
 
-        let mut accounts = Vec::with_capacity(account_count as usize);
-        for i in 0..account_count {
-            match device.get_address(i, variant, is_mainnet, true) {
-                Ok(addr) => {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.trezor_import_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let result = (|| -> TrezorImportUpdate {
+                let mut device = trezor_signer::open(&mut trezor_signer::PinentryPairing)
+                    .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
+                let model = device.model();
+
+                let mut accounts = Vec::with_capacity(account_count as usize);
+                for i in 0..account_count {
+                    let addr = device
+                        .get_address(i, variant, is_mainnet, true)
+                        .map_err(|e| {
+                            format!("Failed to import account {} from Trezor: {}", i, e)
+                        })?;
                     let config = qpv2_core::types::MultisigConfig::single_sig(
                         variant,
                         addr.pubkey,
@@ -859,15 +872,21 @@ impl App {
                         initiating_signer_lock_args: None,
                     });
                 }
-                Err(e) => {
-                    let msg = format!("Failed to import account {} from Trezor: {}", i, e);
-                    tracing::error!("{}", msg);
-                    self.status = Status::Error(msg);
-                    return;
-                }
-            }
-        }
+                Ok((model, variant, accounts))
+            })();
+            let _ = tx.send(result);
+        });
+    }
 
+    /// Turn the accounts imported from a Trezor into a wallet. Called by
+    /// `poll_trezor_import` on the UI thread; the wallet id is allocated only
+    /// now, so a failed or cancelled import leaves no empty wallet behind.
+    pub(crate) fn finish_trezor_import(
+        &mut self,
+        model: String,
+        variant: SpxVariant,
+        accounts: Vec<qpv2_core::types::SphincsPlusAccount>,
+    ) {
         let (wallet_id, wallet_name) = match self.prepare_new_wallet() {
             Ok(v) => v,
             Err(e) => {

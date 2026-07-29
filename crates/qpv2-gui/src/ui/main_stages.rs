@@ -699,15 +699,31 @@ impl App {
     }
 
     /// A single full-width button that imports accounts from a connected
-    /// Trezor as a new watch-only wallet.
+    /// Trezor as a new watch-only wallet. While the import runs the button
+    /// waits and points the user at the device, which is where the PIN and
+    /// address confirmations are answered.
     fn draw_trezor_connect_button(&mut self, ui: &mut egui::Ui, width: f32) {
         let size = egui::vec2(width, 34.0);
+        let waiting = self.trezor_import_rx.is_some();
         ui.horizontal(|ui| {
             let btn = ghost_button(&self.colors, "Connect Trezor", size);
-            if ui.add(btn).clicked() {
+            if ui.add_enabled(!waiting, btn).clicked() {
                 self.create_wallet_with_trezor(self.selected_variant, 1);
             }
         });
+        if waiting {
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let t = ui.input(|i| i.time) as f32;
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                breathing_dot(ui.painter(), dot.center(), self.colors.accent, t, false);
+                ui.label(
+                    egui::RichText::new("Follow the instructions on your Trezor's screen.")
+                        .font(label_font(10.0))
+                        .color(self.colors.text_muted),
+                );
+            });
+        }
     }
 
     /// One row of three auth-method buttons (create or import).
@@ -715,6 +731,12 @@ impl App {
         let gap = 6.0;
         let btn_w = (width - 2.0 * gap) / 3.0;
         let size = egui::vec2(btn_w, 34.0);
+        // A Trezor import in flight owns both the device and this screen's
+        // outcome. Finishing another wallet here would strand that worker
+        // mid-conversation, and it keeps the device claimed until it returns
+        // — the next Trezor action would then fail as "in use by another
+        // application". Cheaper to not let the two races start.
+        let device_busy = self.trezor_import_rx.is_some();
         let labels = [
             keychain::short_name().to_string(),
             "Security Key".to_string(),
@@ -728,7 +750,7 @@ impl App {
                 // selected state next to the parameter grid above,
                 // and these are actions, not options.
                 let btn = ghost_button(&self.colors, label, size);
-                if ui.add(btn).clicked() {
+                if ui.add_enabled(!device_busy, btn).clicked() {
                     let v = self.selected_variant;
                     let ssc = SingleSigConvention::new(self.import_from_v1);
                     match (import, idx) {
