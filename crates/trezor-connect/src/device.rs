@@ -15,10 +15,11 @@ use crate::thp::ThpSession;
 use crate::TrezorSignerError;
 
 /// The single-sig convention a Trezor account uses. The firmware hard-codes the
-/// config header `[0x80, 0x00, 0x01, 0x01, flag]` (`required_first_n = 0`), which
-/// is QuantumPurse's [`SingleSigConvention::V1`]. Using `Standard`
-/// (`required_first_n = 1`) here would derive a different lock script and address.
-pub const TREZOR_CONVENTION: SingleSigConvention = SingleSigConvention::V1;
+/// config header `[0x80, 0x01, 0x01, 0x01, flag]` (`required_first_n = 1`), which
+/// is QuantumPurse's [`SingleSigConvention::Standard`]. Using `V1`
+/// (`required_first_n = 0`) here would derive a different lock script and address,
+/// and `get_address`'s parity check would reject every account.
+pub const TREZOR_CONVENTION: SingleSigConvention = SingleSigConvention::Standard;
 
 /// Where a discovered device lives — determines the transport used to reach it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
