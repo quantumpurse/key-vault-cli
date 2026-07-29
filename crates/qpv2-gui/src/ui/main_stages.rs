@@ -514,7 +514,7 @@ impl App {
     // ────────────────────────────────────────────────────────────────
 
     pub(crate) fn show_welcome(&mut self, ui: &mut egui::Ui) {
-        let panel_w = 680.0;
+        let panel_w = 600.0;
 
         ui.vertical_centered(|ui| {
             ui.add_space(15.0);
@@ -595,17 +595,19 @@ impl App {
     /// 6×2 table of SPHINCS+ parameter-set cells with shared hairline
     /// borders, so the picker reads as one unit instead of twelve chips.
     fn draw_variant_grid(&mut self, ui: &mut egui::Ui, width: f32) {
+        // Row-major, so the first six are the top row (SHA2) and the
+        // last six the bottom row (SHAKE): one hash family per line.
         const VARIANTS: [SpxVariant; 12] = [
             SpxVariant::Sha2128S,
             SpxVariant::Sha2128F,
-            SpxVariant::Shake128S,
-            SpxVariant::Shake128F,
             SpxVariant::Sha2192S,
             SpxVariant::Sha2192F,
-            SpxVariant::Shake192S,
-            SpxVariant::Shake192F,
             SpxVariant::Sha2256S,
             SpxVariant::Sha2256F,
+            SpxVariant::Shake128S,
+            SpxVariant::Shake128F,
+            SpxVariant::Shake192S,
+            SpxVariant::Shake192F,
             SpxVariant::Shake256S,
             SpxVariant::Shake256F,
         ];
