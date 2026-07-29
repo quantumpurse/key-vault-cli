@@ -80,7 +80,7 @@ fn testnet_lock(lock_args: &[u8]) -> Script {
 #[test]
 #[ignore = "requires a running Trezor emulator at 127.0.0.1:21324"]
 fn get_address_parity() {
-    let mut dev = trezor_signer::open().expect("connect to emulator");
+    let mut dev = trezor_signer::open_emulator().expect("connect to emulator");
     let addr = with_auto_approve(|| {
         dev.get_address(0, SpxVariant::Sha2128S, false, false)
             .expect("get_address(0, Sha2128S, testnet)")
@@ -108,7 +108,7 @@ fn get_address_parity() {
 #[ignore = "requires a running Trezor emulator at 127.0.0.1:21324"]
 fn sign_transfer_verifies() {
     let variant = SpxVariant::Sha2128S;
-    let mut dev = trezor_signer::open().expect("connect to emulator");
+    let mut dev = trezor_signer::open_emulator().expect("connect to emulator");
 
     let (signed, digest, pubkey) = with_auto_approve(|| {
         let addr = dev

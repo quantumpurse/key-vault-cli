@@ -6748,13 +6748,19 @@ dependencies = [
  "getrandom 0.3.4",
  "hex",
  "log",
+ "num-bigint",
  "protobuf",
  "qpv2-core",
+ "rusb",
+ "serde",
+ "serde_json",
+ "sha2",
  "thiserror 2.0.18",
  "tracing",
  "trezor-client",
  "trezor-noise-rust-crypto",
  "trezor-thp",
+ "x25519-dalek",
 ]
 
 [[package]]
@@ -8014,6 +8020,7 @@ checksum = "c7e468321c81fb07fa7f4c636c3972b9100f0346e5b6a9f2bd0603a52f7ed277"
 dependencies = [
  "curve25519-dalek",
  "rand_core 0.6.4",
+ "serde",
  "zeroize",
 ]
 

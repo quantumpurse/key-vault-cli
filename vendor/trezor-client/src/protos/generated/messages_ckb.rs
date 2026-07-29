@@ -1141,6 +1141,8 @@ pub struct CKBSphincsPlusSignTx {
     pub sign_group_input_indices: ::std::vec::Vec<u32>,
     // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBSphincsPlusSignTx.chunkify)
     pub chunkify: ::std::option::Option<bool>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBSphincsPlusSignTx.header_deps)
+    pub header_deps: ::std::vec::Vec<::std::vec::Vec<u8>>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.ckb.CKBSphincsPlusSignTx.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -1327,7 +1329,7 @@ impl CKBSphincsPlusSignTx {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(9);
+        let mut fields = ::std::vec::Vec::with_capacity(10);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "account_index",
@@ -1373,6 +1375,11 @@ impl CKBSphincsPlusSignTx {
             "chunkify",
             |m: &CKBSphincsPlusSignTx| { &m.chunkify },
             |m: &mut CKBSphincsPlusSignTx| { &mut m.chunkify },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
+            "header_deps",
+            |m: &CKBSphincsPlusSignTx| { &m.header_deps },
+            |m: &mut CKBSphincsPlusSignTx| { &mut m.header_deps },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CKBSphincsPlusSignTx>(
             "CKBSphincsPlusSignTx",
@@ -1431,6 +1438,9 @@ impl ::protobuf::Message for CKBSphincsPlusSignTx {
                 72 => {
                     self.chunkify = ::std::option::Option::Some(is.read_bool()?);
                 },
+                82 => {
+                    self.header_deps.push(is.read_bytes()?);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -1470,6 +1480,9 @@ impl ::protobuf::Message for CKBSphincsPlusSignTx {
         if let Some(v) = self.chunkify {
             my_size += 1 + 1;
         }
+        for value in &self.header_deps {
+            my_size += ::protobuf::rt::bytes_size(10, &value);
+        };
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -1503,6 +1516,9 @@ impl ::protobuf::Message for CKBSphincsPlusSignTx {
         if let Some(v) = self.chunkify {
             os.write_bool(9, v)?;
         }
+        for v in &self.header_deps {
+            os.write_bytes(10, &v)?;
+        };
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -1529,6 +1545,7 @@ impl ::protobuf::Message for CKBSphincsPlusSignTx {
         self.witnesses_count = ::std::option::Option::None;
         self.sign_group_input_indices.clear();
         self.chunkify = ::std::option::Option::None;
+        self.header_deps.clear();
         self.special_fields.clear();
     }
 
@@ -1543,6 +1560,7 @@ impl ::protobuf::Message for CKBSphincsPlusSignTx {
             witnesses_count: ::std::option::Option::None,
             sign_group_input_indices: ::std::vec::Vec::new(),
             chunkify: ::std::option::Option::None,
+            header_deps: ::std::vec::Vec::new(),
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -3475,6 +3493,10 @@ pub struct CKBCellInput {
     pub previous_output_index: ::std::option::Option<u32>,
     // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBCellInput.since)
     pub since: ::std::option::Option<u64>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBCellInput.dao_deposit_header_index)
+    pub dao_deposit_header_index: ::std::option::Option<u32>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBCellInput.dao_withdraw_header_index)
+    pub dao_withdraw_header_index: ::std::option::Option<u32>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.ckb.CKBCellInput.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -3565,8 +3587,46 @@ impl CKBCellInput {
         self.since = ::std::option::Option::Some(v);
     }
 
+    // optional uint32 dao_deposit_header_index = 4;
+
+    pub fn dao_deposit_header_index(&self) -> u32 {
+        self.dao_deposit_header_index.unwrap_or(0)
+    }
+
+    pub fn clear_dao_deposit_header_index(&mut self) {
+        self.dao_deposit_header_index = ::std::option::Option::None;
+    }
+
+    pub fn has_dao_deposit_header_index(&self) -> bool {
+        self.dao_deposit_header_index.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_dao_deposit_header_index(&mut self, v: u32) {
+        self.dao_deposit_header_index = ::std::option::Option::Some(v);
+    }
+
+    // optional uint32 dao_withdraw_header_index = 5;
+
+    pub fn dao_withdraw_header_index(&self) -> u32 {
+        self.dao_withdraw_header_index.unwrap_or(0)
+    }
+
+    pub fn clear_dao_withdraw_header_index(&mut self) {
+        self.dao_withdraw_header_index = ::std::option::Option::None;
+    }
+
+    pub fn has_dao_withdraw_header_index(&self) -> bool {
+        self.dao_withdraw_header_index.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_dao_withdraw_header_index(&mut self, v: u32) {
+        self.dao_withdraw_header_index = ::std::option::Option::Some(v);
+    }
+
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(3);
+        let mut fields = ::std::vec::Vec::with_capacity(5);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "previous_output_tx_hash",
@@ -3582,6 +3642,16 @@ impl CKBCellInput {
             "since",
             |m: &CKBCellInput| { &m.since },
             |m: &mut CKBCellInput| { &mut m.since },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "dao_deposit_header_index",
+            |m: &CKBCellInput| { &m.dao_deposit_header_index },
+            |m: &mut CKBCellInput| { &mut m.dao_deposit_header_index },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "dao_withdraw_header_index",
+            |m: &CKBCellInput| { &m.dao_withdraw_header_index },
+            |m: &mut CKBCellInput| { &mut m.dao_withdraw_header_index },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CKBCellInput>(
             "CKBCellInput",
@@ -3616,6 +3686,12 @@ impl ::protobuf::Message for CKBCellInput {
                 24 => {
                     self.since = ::std::option::Option::Some(is.read_uint64()?);
                 },
+                32 => {
+                    self.dao_deposit_header_index = ::std::option::Option::Some(is.read_uint32()?);
+                },
+                40 => {
+                    self.dao_withdraw_header_index = ::std::option::Option::Some(is.read_uint32()?);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -3637,6 +3713,12 @@ impl ::protobuf::Message for CKBCellInput {
         if let Some(v) = self.since {
             my_size += ::protobuf::rt::uint64_size(3, v);
         }
+        if let Some(v) = self.dao_deposit_header_index {
+            my_size += ::protobuf::rt::uint32_size(4, v);
+        }
+        if let Some(v) = self.dao_withdraw_header_index {
+            my_size += ::protobuf::rt::uint32_size(5, v);
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -3651,6 +3733,12 @@ impl ::protobuf::Message for CKBCellInput {
         }
         if let Some(v) = self.since {
             os.write_uint64(3, v)?;
+        }
+        if let Some(v) = self.dao_deposit_header_index {
+            os.write_uint32(4, v)?;
+        }
+        if let Some(v) = self.dao_withdraw_header_index {
+            os.write_uint32(5, v)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -3672,6 +3760,8 @@ impl ::protobuf::Message for CKBCellInput {
         self.previous_output_tx_hash = ::std::option::Option::None;
         self.previous_output_index = ::std::option::Option::None;
         self.since = ::std::option::Option::None;
+        self.dao_deposit_header_index = ::std::option::Option::None;
+        self.dao_withdraw_header_index = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
@@ -3680,6 +3770,8 @@ impl ::protobuf::Message for CKBCellInput {
             previous_output_tx_hash: ::std::option::Option::None,
             previous_output_index: ::std::option::Option::None,
             since: ::std::option::Option::None,
+            dao_deposit_header_index: ::std::option::Option::None,
+            dao_withdraw_header_index: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -4461,6 +4553,8 @@ pub struct CKBSignTx {
     pub witnesses_count: ::std::option::Option<u32>,
     // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBSignTx.sign_group_input_indices)
     pub sign_group_input_indices: ::std::vec::Vec<u32>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBSignTx.header_deps)
+    pub header_deps: ::std::vec::Vec<::std::vec::Vec<u8>>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.ckb.CKBSignTx.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -4609,7 +4703,7 @@ impl CKBSignTx {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(8);
+        let mut fields = ::std::vec::Vec::with_capacity(9);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
             "address_n",
@@ -4650,6 +4744,11 @@ impl CKBSignTx {
             "sign_group_input_indices",
             |m: &CKBSignTx| { &m.sign_group_input_indices },
             |m: &mut CKBSignTx| { &mut m.sign_group_input_indices },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
+            "header_deps",
+            |m: &CKBSignTx| { &m.header_deps },
+            |m: &mut CKBSignTx| { &mut m.header_deps },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CKBSignTx>(
             "CKBSignTx",
@@ -4708,6 +4807,9 @@ impl ::protobuf::Message for CKBSignTx {
                 64 => {
                     self.sign_group_input_indices.push(is.read_uint32()?);
                 },
+                74 => {
+                    self.header_deps.push(is.read_bytes()?);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -4744,6 +4846,9 @@ impl ::protobuf::Message for CKBSignTx {
         for value in &self.sign_group_input_indices {
             my_size += ::protobuf::rt::uint32_size(8, *value);
         };
+        for value in &self.header_deps {
+            my_size += ::protobuf::rt::bytes_size(9, &value);
+        };
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -4774,6 +4879,9 @@ impl ::protobuf::Message for CKBSignTx {
         for v in &self.sign_group_input_indices {
             os.write_uint32(8, *v)?;
         };
+        for v in &self.header_deps {
+            os.write_bytes(9, &v)?;
+        };
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -4799,6 +4907,7 @@ impl ::protobuf::Message for CKBSignTx {
         self.chunkify = ::std::option::Option::None;
         self.witnesses_count = ::std::option::Option::None;
         self.sign_group_input_indices.clear();
+        self.header_deps.clear();
         self.special_fields.clear();
     }
 
@@ -4812,6 +4921,7 @@ impl ::protobuf::Message for CKBSignTx {
             chunkify: ::std::option::Option::None,
             witnesses_count: ::std::option::Option::None,
             sign_group_input_indices: ::std::vec::Vec::new(),
+            header_deps: ::std::vec::Vec::new(),
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -6170,6 +6280,783 @@ impl ::protobuf::reflect::ProtobufValue for CKBTxAckPrevMeta {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
+// @@protoc_insertion_point(message:hw.trezor.messages.ckb.CKBBlockHeader)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct CKBBlockHeader {
+    // message fields
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.version)
+    pub version: ::std::option::Option<u32>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.compact_target)
+    pub compact_target: ::std::option::Option<u32>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.timestamp)
+    pub timestamp: ::std::option::Option<u64>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.number)
+    pub number: ::std::option::Option<u64>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.epoch)
+    pub epoch: ::std::option::Option<u64>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.parent_hash)
+    pub parent_hash: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.transactions_root)
+    pub transactions_root: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.proposals_hash)
+    pub proposals_hash: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.extra_hash)
+    pub extra_hash: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.dao)
+    pub dao: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBBlockHeader.nonce)
+    pub nonce: ::std::option::Option<::std::vec::Vec<u8>>,
+    // special fields
+    // @@protoc_insertion_point(special_field:hw.trezor.messages.ckb.CKBBlockHeader.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a CKBBlockHeader {
+    fn default() -> &'a CKBBlockHeader {
+        <CKBBlockHeader as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl CKBBlockHeader {
+    pub fn new() -> CKBBlockHeader {
+        ::std::default::Default::default()
+    }
+
+    // required uint32 version = 1;
+
+    pub fn version(&self) -> u32 {
+        self.version.unwrap_or(0)
+    }
+
+    pub fn clear_version(&mut self) {
+        self.version = ::std::option::Option::None;
+    }
+
+    pub fn has_version(&self) -> bool {
+        self.version.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_version(&mut self, v: u32) {
+        self.version = ::std::option::Option::Some(v);
+    }
+
+    // required uint32 compact_target = 2;
+
+    pub fn compact_target(&self) -> u32 {
+        self.compact_target.unwrap_or(0)
+    }
+
+    pub fn clear_compact_target(&mut self) {
+        self.compact_target = ::std::option::Option::None;
+    }
+
+    pub fn has_compact_target(&self) -> bool {
+        self.compact_target.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_compact_target(&mut self, v: u32) {
+        self.compact_target = ::std::option::Option::Some(v);
+    }
+
+    // required uint64 timestamp = 3;
+
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp.unwrap_or(0)
+    }
+
+    pub fn clear_timestamp(&mut self) {
+        self.timestamp = ::std::option::Option::None;
+    }
+
+    pub fn has_timestamp(&self) -> bool {
+        self.timestamp.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_timestamp(&mut self, v: u64) {
+        self.timestamp = ::std::option::Option::Some(v);
+    }
+
+    // required uint64 number = 4;
+
+    pub fn number(&self) -> u64 {
+        self.number.unwrap_or(0)
+    }
+
+    pub fn clear_number(&mut self) {
+        self.number = ::std::option::Option::None;
+    }
+
+    pub fn has_number(&self) -> bool {
+        self.number.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_number(&mut self, v: u64) {
+        self.number = ::std::option::Option::Some(v);
+    }
+
+    // required uint64 epoch = 5;
+
+    pub fn epoch(&self) -> u64 {
+        self.epoch.unwrap_or(0)
+    }
+
+    pub fn clear_epoch(&mut self) {
+        self.epoch = ::std::option::Option::None;
+    }
+
+    pub fn has_epoch(&self) -> bool {
+        self.epoch.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_epoch(&mut self, v: u64) {
+        self.epoch = ::std::option::Option::Some(v);
+    }
+
+    // required bytes parent_hash = 6;
+
+    pub fn parent_hash(&self) -> &[u8] {
+        match self.parent_hash.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_parent_hash(&mut self) {
+        self.parent_hash = ::std::option::Option::None;
+    }
+
+    pub fn has_parent_hash(&self) -> bool {
+        self.parent_hash.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_parent_hash(&mut self, v: ::std::vec::Vec<u8>) {
+        self.parent_hash = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_parent_hash(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.parent_hash.is_none() {
+            self.parent_hash = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.parent_hash.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_parent_hash(&mut self) -> ::std::vec::Vec<u8> {
+        self.parent_hash.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    // required bytes transactions_root = 7;
+
+    pub fn transactions_root(&self) -> &[u8] {
+        match self.transactions_root.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_transactions_root(&mut self) {
+        self.transactions_root = ::std::option::Option::None;
+    }
+
+    pub fn has_transactions_root(&self) -> bool {
+        self.transactions_root.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_transactions_root(&mut self, v: ::std::vec::Vec<u8>) {
+        self.transactions_root = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_transactions_root(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.transactions_root.is_none() {
+            self.transactions_root = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.transactions_root.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_transactions_root(&mut self) -> ::std::vec::Vec<u8> {
+        self.transactions_root.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    // required bytes proposals_hash = 8;
+
+    pub fn proposals_hash(&self) -> &[u8] {
+        match self.proposals_hash.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_proposals_hash(&mut self) {
+        self.proposals_hash = ::std::option::Option::None;
+    }
+
+    pub fn has_proposals_hash(&self) -> bool {
+        self.proposals_hash.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_proposals_hash(&mut self, v: ::std::vec::Vec<u8>) {
+        self.proposals_hash = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_proposals_hash(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.proposals_hash.is_none() {
+            self.proposals_hash = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.proposals_hash.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_proposals_hash(&mut self) -> ::std::vec::Vec<u8> {
+        self.proposals_hash.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    // required bytes extra_hash = 9;
+
+    pub fn extra_hash(&self) -> &[u8] {
+        match self.extra_hash.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_extra_hash(&mut self) {
+        self.extra_hash = ::std::option::Option::None;
+    }
+
+    pub fn has_extra_hash(&self) -> bool {
+        self.extra_hash.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_extra_hash(&mut self, v: ::std::vec::Vec<u8>) {
+        self.extra_hash = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_extra_hash(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.extra_hash.is_none() {
+            self.extra_hash = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.extra_hash.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_extra_hash(&mut self) -> ::std::vec::Vec<u8> {
+        self.extra_hash.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    // required bytes dao = 10;
+
+    pub fn dao(&self) -> &[u8] {
+        match self.dao.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_dao(&mut self) {
+        self.dao = ::std::option::Option::None;
+    }
+
+    pub fn has_dao(&self) -> bool {
+        self.dao.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_dao(&mut self, v: ::std::vec::Vec<u8>) {
+        self.dao = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_dao(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.dao.is_none() {
+            self.dao = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.dao.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_dao(&mut self) -> ::std::vec::Vec<u8> {
+        self.dao.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    // required bytes nonce = 11;
+
+    pub fn nonce(&self) -> &[u8] {
+        match self.nonce.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_nonce(&mut self) {
+        self.nonce = ::std::option::Option::None;
+    }
+
+    pub fn has_nonce(&self) -> bool {
+        self.nonce.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_nonce(&mut self, v: ::std::vec::Vec<u8>) {
+        self.nonce = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_nonce(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.nonce.is_none() {
+            self.nonce = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.nonce.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_nonce(&mut self) -> ::std::vec::Vec<u8> {
+        self.nonce.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(11);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "version",
+            |m: &CKBBlockHeader| { &m.version },
+            |m: &mut CKBBlockHeader| { &mut m.version },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "compact_target",
+            |m: &CKBBlockHeader| { &m.compact_target },
+            |m: &mut CKBBlockHeader| { &mut m.compact_target },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "timestamp",
+            |m: &CKBBlockHeader| { &m.timestamp },
+            |m: &mut CKBBlockHeader| { &mut m.timestamp },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "number",
+            |m: &CKBBlockHeader| { &m.number },
+            |m: &mut CKBBlockHeader| { &mut m.number },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "epoch",
+            |m: &CKBBlockHeader| { &m.epoch },
+            |m: &mut CKBBlockHeader| { &mut m.epoch },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "parent_hash",
+            |m: &CKBBlockHeader| { &m.parent_hash },
+            |m: &mut CKBBlockHeader| { &mut m.parent_hash },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "transactions_root",
+            |m: &CKBBlockHeader| { &m.transactions_root },
+            |m: &mut CKBBlockHeader| { &mut m.transactions_root },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "proposals_hash",
+            |m: &CKBBlockHeader| { &m.proposals_hash },
+            |m: &mut CKBBlockHeader| { &mut m.proposals_hash },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "extra_hash",
+            |m: &CKBBlockHeader| { &m.extra_hash },
+            |m: &mut CKBBlockHeader| { &mut m.extra_hash },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "dao",
+            |m: &CKBBlockHeader| { &m.dao },
+            |m: &mut CKBBlockHeader| { &mut m.dao },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "nonce",
+            |m: &CKBBlockHeader| { &m.nonce },
+            |m: &mut CKBBlockHeader| { &mut m.nonce },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CKBBlockHeader>(
+            "CKBBlockHeader",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for CKBBlockHeader {
+    const NAME: &'static str = "CKBBlockHeader";
+
+    fn is_initialized(&self) -> bool {
+        if self.version.is_none() {
+            return false;
+        }
+        if self.compact_target.is_none() {
+            return false;
+        }
+        if self.timestamp.is_none() {
+            return false;
+        }
+        if self.number.is_none() {
+            return false;
+        }
+        if self.epoch.is_none() {
+            return false;
+        }
+        if self.parent_hash.is_none() {
+            return false;
+        }
+        if self.transactions_root.is_none() {
+            return false;
+        }
+        if self.proposals_hash.is_none() {
+            return false;
+        }
+        if self.extra_hash.is_none() {
+            return false;
+        }
+        if self.dao.is_none() {
+            return false;
+        }
+        if self.nonce.is_none() {
+            return false;
+        }
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                8 => {
+                    self.version = ::std::option::Option::Some(is.read_uint32()?);
+                },
+                16 => {
+                    self.compact_target = ::std::option::Option::Some(is.read_uint32()?);
+                },
+                24 => {
+                    self.timestamp = ::std::option::Option::Some(is.read_uint64()?);
+                },
+                32 => {
+                    self.number = ::std::option::Option::Some(is.read_uint64()?);
+                },
+                40 => {
+                    self.epoch = ::std::option::Option::Some(is.read_uint64()?);
+                },
+                50 => {
+                    self.parent_hash = ::std::option::Option::Some(is.read_bytes()?);
+                },
+                58 => {
+                    self.transactions_root = ::std::option::Option::Some(is.read_bytes()?);
+                },
+                66 => {
+                    self.proposals_hash = ::std::option::Option::Some(is.read_bytes()?);
+                },
+                74 => {
+                    self.extra_hash = ::std::option::Option::Some(is.read_bytes()?);
+                },
+                82 => {
+                    self.dao = ::std::option::Option::Some(is.read_bytes()?);
+                },
+                90 => {
+                    self.nonce = ::std::option::Option::Some(is.read_bytes()?);
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if let Some(v) = self.version {
+            my_size += ::protobuf::rt::uint32_size(1, v);
+        }
+        if let Some(v) = self.compact_target {
+            my_size += ::protobuf::rt::uint32_size(2, v);
+        }
+        if let Some(v) = self.timestamp {
+            my_size += ::protobuf::rt::uint64_size(3, v);
+        }
+        if let Some(v) = self.number {
+            my_size += ::protobuf::rt::uint64_size(4, v);
+        }
+        if let Some(v) = self.epoch {
+            my_size += ::protobuf::rt::uint64_size(5, v);
+        }
+        if let Some(v) = self.parent_hash.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(6, &v);
+        }
+        if let Some(v) = self.transactions_root.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(7, &v);
+        }
+        if let Some(v) = self.proposals_hash.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(8, &v);
+        }
+        if let Some(v) = self.extra_hash.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(9, &v);
+        }
+        if let Some(v) = self.dao.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(10, &v);
+        }
+        if let Some(v) = self.nonce.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(11, &v);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if let Some(v) = self.version {
+            os.write_uint32(1, v)?;
+        }
+        if let Some(v) = self.compact_target {
+            os.write_uint32(2, v)?;
+        }
+        if let Some(v) = self.timestamp {
+            os.write_uint64(3, v)?;
+        }
+        if let Some(v) = self.number {
+            os.write_uint64(4, v)?;
+        }
+        if let Some(v) = self.epoch {
+            os.write_uint64(5, v)?;
+        }
+        if let Some(v) = self.parent_hash.as_ref() {
+            os.write_bytes(6, v)?;
+        }
+        if let Some(v) = self.transactions_root.as_ref() {
+            os.write_bytes(7, v)?;
+        }
+        if let Some(v) = self.proposals_hash.as_ref() {
+            os.write_bytes(8, v)?;
+        }
+        if let Some(v) = self.extra_hash.as_ref() {
+            os.write_bytes(9, v)?;
+        }
+        if let Some(v) = self.dao.as_ref() {
+            os.write_bytes(10, v)?;
+        }
+        if let Some(v) = self.nonce.as_ref() {
+            os.write_bytes(11, v)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> CKBBlockHeader {
+        CKBBlockHeader::new()
+    }
+
+    fn clear(&mut self) {
+        self.version = ::std::option::Option::None;
+        self.compact_target = ::std::option::Option::None;
+        self.timestamp = ::std::option::Option::None;
+        self.number = ::std::option::Option::None;
+        self.epoch = ::std::option::Option::None;
+        self.parent_hash = ::std::option::Option::None;
+        self.transactions_root = ::std::option::Option::None;
+        self.proposals_hash = ::std::option::Option::None;
+        self.extra_hash = ::std::option::Option::None;
+        self.dao = ::std::option::Option::None;
+        self.nonce = ::std::option::Option::None;
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static CKBBlockHeader {
+        static instance: CKBBlockHeader = CKBBlockHeader {
+            version: ::std::option::Option::None,
+            compact_target: ::std::option::Option::None,
+            timestamp: ::std::option::Option::None,
+            number: ::std::option::Option::None,
+            epoch: ::std::option::Option::None,
+            parent_hash: ::std::option::Option::None,
+            transactions_root: ::std::option::Option::None,
+            proposals_hash: ::std::option::Option::None,
+            extra_hash: ::std::option::Option::None,
+            dao: ::std::option::Option::None,
+            nonce: ::std::option::Option::None,
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for CKBBlockHeader {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("CKBBlockHeader").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for CKBBlockHeader {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for CKBBlockHeader {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:hw.trezor.messages.ckb.CKBTxAckHeader)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct CKBTxAckHeader {
+    // message fields
+    // @@protoc_insertion_point(field:hw.trezor.messages.ckb.CKBTxAckHeader.header)
+    pub header: ::protobuf::MessageField<CKBBlockHeader>,
+    // special fields
+    // @@protoc_insertion_point(special_field:hw.trezor.messages.ckb.CKBTxAckHeader.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a CKBTxAckHeader {
+    fn default() -> &'a CKBTxAckHeader {
+        <CKBTxAckHeader as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl CKBTxAckHeader {
+    pub fn new() -> CKBTxAckHeader {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(1);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, CKBBlockHeader>(
+            "header",
+            |m: &CKBTxAckHeader| { &m.header },
+            |m: &mut CKBTxAckHeader| { &mut m.header },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CKBTxAckHeader>(
+            "CKBTxAckHeader",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for CKBTxAckHeader {
+    const NAME: &'static str = "CKBTxAckHeader";
+
+    fn is_initialized(&self) -> bool {
+        if self.header.is_none() {
+            return false;
+        }
+        for v in &self.header {
+            if !v.is_initialized() {
+                return false;
+            }
+        };
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.header)?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if let Some(v) = self.header.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if let Some(v) = self.header.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(1, v, os)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> CKBTxAckHeader {
+        CKBTxAckHeader::new()
+    }
+
+    fn clear(&mut self) {
+        self.header.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static CKBTxAckHeader {
+        static instance: CKBTxAckHeader = CKBTxAckHeader {
+            header: ::protobuf::MessageField::none(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for CKBTxAckHeader {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("CKBTxAckHeader").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for CKBTxAckHeader {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for CKBTxAckHeader {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
 // @@protoc_insertion_point(message:hw.trezor.messages.ckb.CKBWitnessArgs)
 #[derive(PartialEq,Clone,Default,Debug)]
 pub struct CKBWitnessArgs {
@@ -6775,8 +7662,10 @@ pub enum CKBTxRequestType {
     TXPREVOUTPUT = 7,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.ckb.CKBTxRequestType.TXPREVCELLDEP)
     TXPREVCELLDEP = 8,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.ckb.CKBTxRequestType.TXHEADER)
+    TXHEADER = 9,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.ckb.CKBTxRequestType.TXSIGCHUNK)
-    TXSIGCHUNK = 9,
+    TXSIGCHUNK = 10,
 }
 
 impl ::protobuf::Enum for CKBTxRequestType {
@@ -6797,7 +7686,8 @@ impl ::protobuf::Enum for CKBTxRequestType {
             6 => ::std::option::Option::Some(CKBTxRequestType::TXPREVINPUT),
             7 => ::std::option::Option::Some(CKBTxRequestType::TXPREVOUTPUT),
             8 => ::std::option::Option::Some(CKBTxRequestType::TXPREVCELLDEP),
-            9 => ::std::option::Option::Some(CKBTxRequestType::TXSIGCHUNK),
+            9 => ::std::option::Option::Some(CKBTxRequestType::TXHEADER),
+            10 => ::std::option::Option::Some(CKBTxRequestType::TXSIGCHUNK),
             _ => ::std::option::Option::None
         }
     }
@@ -6813,6 +7703,7 @@ impl ::protobuf::Enum for CKBTxRequestType {
             "TXPREVINPUT" => ::std::option::Option::Some(CKBTxRequestType::TXPREVINPUT),
             "TXPREVOUTPUT" => ::std::option::Option::Some(CKBTxRequestType::TXPREVOUTPUT),
             "TXPREVCELLDEP" => ::std::option::Option::Some(CKBTxRequestType::TXPREVCELLDEP),
+            "TXHEADER" => ::std::option::Option::Some(CKBTxRequestType::TXHEADER),
             "TXSIGCHUNK" => ::std::option::Option::Some(CKBTxRequestType::TXSIGCHUNK),
             _ => ::std::option::Option::None
         }
@@ -6828,6 +7719,7 @@ impl ::protobuf::Enum for CKBTxRequestType {
         CKBTxRequestType::TXPREVINPUT,
         CKBTxRequestType::TXPREVOUTPUT,
         CKBTxRequestType::TXPREVCELLDEP,
+        CKBTxRequestType::TXHEADER,
         CKBTxRequestType::TXSIGCHUNK,
     ];
 }
@@ -6871,7 +7763,7 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     ss\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07address\x12\x1b\n\tlock_a\
     rgs\x18\x02\x20\x02(\x0cR\x08lockArgs\x12\x1d\n\npublic_key\x18\x03\x20\
     \x02(\x0cR\tpublicKey\x12\x18\n\x07variant\x18\x04\x20\x02(\rR\x07varian\
-    t\"\xe7\x02\n\x14CKBSphincsPlusSignTx\x12&\n\raccount_index\x18\x01\x20\
+    t\"\x88\x03\n\x14CKBSphincsPlusSignTx\x12&\n\raccount_index\x18\x01\x20\
     \x01(\r:\x010R\x0caccountIndex\x12\x1c\n\x07variant\x18\x02\x20\x01(\r:\
     \x0249R\x07variant\x12\x18\n\x07network\x18\x03\x20\x02(\tR\x07network\
     \x12!\n\x0cinputs_count\x18\x04\x20\x02(\rR\x0binputsCount\x12#\n\routpu\
@@ -6879,81 +7771,96 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x18\x06\x20\x01(\r:\x010R\rcellDepsCount\x12'\n\x0fwitnesses_count\x18\
     \x07\x20\x01(\rR\x0ewitnessesCount\x127\n\x18sign_group_input_indices\
     \x18\x08\x20\x03(\rR\x15signGroupInputIndices\x12\x1a\n\x08chunkify\x18\
-    \t\x20\x01(\x08R\x08chunkify\"\xb1\x01\n\x19CKBSphincsPlusSignMessage\
-    \x12&\n\raccount_index\x18\x01\x20\x01(\r:\x010R\x0caccountIndex\x12\x1c\
-    \n\x07variant\x18\x02\x20\x01(\r:\x0249R\x07variant\x12\x18\n\x07message\
-    \x18\x03\x20\x02(\x0cR\x07message\x12\x18\n\x07network\x18\x04\x20\x02(\
-    \tR\x07network\x12\x1a\n\x08chunkify\x18\x05\x20\x01(\x08R\x08chunkify\"\
-    s\n\x1eCKBSphincsPlusMessageSignature\x12\x18\n\x07address\x18\x01\x20\
-    \x02(\tR\x07address\x12\x1d\n\npublic_key\x18\x02\x20\x02(\x0cR\tpublicK\
-    ey\x12\x18\n\x07variant\x18\x03\x20\x02(\rR\x07variant\"\xf2\x01\n\x1bCK\
-    BSphincsPlusVerifyMessage\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07ad\
-    dress\x12\x1d\n\npublic_key\x18\x02\x20\x02(\x0cR\tpublicKey\x12\x18\n\
-    \x07message\x18\x03\x20\x02(\x0cR\x07message\x12\x18\n\x07variant\x18\
-    \x04\x20\x02(\rR\x07variant\x12\x18\n\x07network\x18\x05\x20\x02(\tR\x07\
-    network\x120\n\x14signature_total_size\x18\x06\x20\x02(\rR\x12signatureT\
-    otalSize\x12\x1a\n\x08chunkify\x18\x07\x20\x01(\x08R\x08chunkify\"}\n\
-    \x0eCKBSignMessage\x12\x1b\n\taddress_n\x18\x01\x20\x03(\rR\x08addressN\
-    \x12\x18\n\x07message\x18\x02\x20\x02(\x0cR\x07message\x12\x18\n\x07netw\
-    ork\x18\x03\x20\x02(\tR\x07network\x12\x1a\n\x08chunkify\x18\x04\x20\x01\
-    (\x08R\x08chunkify\"M\n\x13CKBMessageSignature\x12\x18\n\x07address\x18\
-    \x01\x20\x02(\tR\x07address\x12\x1c\n\tsignature\x18\x02\x20\x02(\x0cR\t\
-    signature\"\x9a\x01\n\x10CKBVerifyMessage\x12\x18\n\x07address\x18\x01\
-    \x20\x02(\tR\x07address\x12\x1c\n\tsignature\x18\x02\x20\x02(\x0cR\tsign\
-    ature\x12\x18\n\x07message\x18\x03\x20\x02(\x0cR\x07message\x12\x18\n\
-    \x07network\x18\x04\x20\x02(\tR\x07network\x12\x1a\n\x08chunkify\x18\x05\
-    \x20\x01(\x08R\x08chunkify\"\x92\x01\n\x0cCKBCellInput\x125\n\x17previou\
-    s_output_tx_hash\x18\x01\x20\x02(\x0cR\x14previousOutputTxHash\x122\n\
-    \x15previous_output_index\x18\x02\x20\x02(\rR\x13previousOutputIndex\x12\
-    \x17\n\x05since\x18\x03\x20\x01(\x04:\x010R\x05since\"\x91\x02\n\rCKBCel\
-    lOutput\x12\x1a\n\x08capacity\x18\x01\x20\x02(\x04R\x08capacity\x12$\n\
-    \x0elock_code_hash\x18\x02\x20\x02(\x0cR\x0clockCodeHash\x12$\n\x0elock_\
-    hash_type\x18\x03\x20\x02(\rR\x0clockHashType\x12\x1b\n\tlock_args\x18\
-    \x04\x20\x02(\x0cR\x08lockArgs\x12$\n\x0etype_code_hash\x18\x05\x20\x01(\
-    \x0cR\x0ctypeCodeHash\x12$\n\x0etype_hash_type\x18\x06\x20\x01(\rR\x0cty\
-    peHashType\x12\x1b\n\ttype_args\x18\x07\x20\x01(\x0cR\x08typeArgs\x12\
-    \x12\n\x04data\x18\x08\x20\x01(\x0cR\x04data\"V\n\nCKBCellDep\x12\x17\n\
-    \x07tx_hash\x18\x01\x20\x02(\x0cR\x06txHash\x12\x14\n\x05index\x18\x02\
-    \x20\x02(\rR\x05index\x12\x19\n\x08dep_type\x18\x03\x20\x02(\rR\x07depTy\
-    pe\"\xb3\x02\n\tCKBSignTx\x12\x1b\n\taddress_n\x18\x01\x20\x03(\rR\x08ad\
-    dressN\x12\x18\n\x07network\x18\x02\x20\x02(\tR\x07network\x12!\n\x0cinp\
-    uts_count\x18\x03\x20\x02(\rR\x0binputsCount\x12#\n\routputs_count\x18\
-    \x04\x20\x02(\rR\x0coutputsCount\x12)\n\x0fcell_deps_count\x18\x05\x20\
-    \x01(\r:\x010R\rcellDepsCount\x12\x1a\n\x08chunkify\x18\x06\x20\x01(\x08\
-    R\x08chunkify\x12'\n\x0fwitnesses_count\x18\x07\x20\x01(\rR\x0ewitnesses\
-    Count\x127\n\x18sign_group_input_indices\x18\x08\x20\x03(\rR\x15signGrou\
-    pInputIndices\"\xf2\x01\n\x0cCKBTxRequest\x12K\n\x0crequest_type\x18\x01\
-    \x20\x01(\x0e2(.hw.trezor.messages.ckb.CKBTxRequestTypeR\x0brequestType\
-    \x12E\n\x07details\x18\x02\x20\x01(\x0b2+.hw.trezor.messages.ckb.CKBTxRe\
-    questDetailsR\x07details\x12N\n\nserialized\x18\x03\x20\x01(\x0b2..hw.tr\
-    ezor.messages.ckb.CKBTxRequestSerializedR\nserialized\"\xb0\x01\n\x13CKB\
-    TxRequestDetails\x12#\n\rrequest_index\x18\x01\x20\x01(\rR\x0crequestInd\
-    ex\x12\x17\n\x07tx_hash\x18\x02\x20\x01(\x0cR\x06txHash\x12)\n\x10signat\
-    ure_offset\x18\x03\x20\x01(\rR\x0fsignatureOffset\x120\n\x14signature_to\
-    tal_size\x18\x04\x20\x01(\rR\x12signatureTotalSize\"O\n\x16CKBTxRequestS\
-    erialized\x12\x1c\n\tsignature\x18\x01\x20\x01(\x0cR\tsignature\x12\x17\
-    \n\x07tx_hash\x18\x02\x20\x01(\x0cR\x06txHash\"K\n\rCKBTxAckInput\x12:\n\
-    \x05input\x18\x01\x20\x02(\x0b2$.hw.trezor.messages.ckb.CKBCellInputR\
-    \x05input\"O\n\x0eCKBTxAckOutput\x12=\n\x06output\x18\x01\x20\x02(\x0b2%\
-    .hw.trezor.messages.ckb.CKBCellOutputR\x06output\"P\n\x0fCKBTxAckCellDep\
-    \x12=\n\x08cell_dep\x18\x01\x20\x02(\x0b2\".hw.trezor.messages.ckb.CKBCe\
-    llDepR\x07cellDep\"\xc0\x01\n\x10CKBTxAckPrevMeta\x12\x18\n\x07version\
-    \x18\x01\x20\x02(\rR\x07version\x12!\n\x0cinputs_count\x18\x02\x20\x02(\
-    \rR\x0binputsCount\x12#\n\routputs_count\x18\x03\x20\x02(\rR\x0coutputsC\
-    ount\x12)\n\x0fcell_deps_count\x18\x04\x20\x01(\r:\x010R\rcellDepsCount\
-    \x12\x1f\n\x0bheader_deps\x18\x05\x20\x03(\x0cR\nheaderDeps\"q\n\x0eCKBW\
-    itnessArgs\x12\x1f\n\tlock_size\x18\x01\x20\x01(\r:\x0265R\x08lockSize\
-    \x12\x1d\n\ninput_type\x18\x02\x20\x01(\x0cR\tinputType\x12\x1f\n\x0bout\
-    put_type\x18\x03\x20\x01(\x0cR\noutputType\"n\n\x0fCKBTxAckWitness\x12I\
-    \n\x0cwitness_args\x18\x01\x20\x01(\x0b2&.hw.trezor.messages.ckb.CKBWitn\
-    essArgsR\x0bwitnessArgs\x12\x10\n\x03raw\x18\x02\x20\x01(\x0cR\x03raw\"0\
-    \n\x10CKBTxAckSigChunk\x12\x1c\n\tsignature\x18\x01\x20\x01(\x0cR\tsigna\
-    ture*\xb1\x01\n\x10CKBTxRequestType\x12\x0b\n\x07TXINPUT\x10\0\x12\x0c\n\
-    \x08TXOUTPUT\x10\x01\x12\r\n\tTXCELLDEP\x10\x02\x12\x0e\n\nTXFINISHED\
-    \x10\x03\x12\r\n\tTXWITNESS\x10\x04\x12\x0e\n\nTXPREVMETA\x10\x05\x12\
-    \x0f\n\x0bTXPREVINPUT\x10\x06\x12\x10\n\x0cTXPREVOUTPUT\x10\x07\x12\x11\
-    \n\rTXPREVCELLDEP\x10\x08\x12\x0e\n\nTXSIGCHUNK\x10\tB7\n#com.satoshilab\
-    s.trezor.lib.protobufB\x10TrezorMessageCKB\
+    \t\x20\x01(\x08R\x08chunkify\x12\x1f\n\x0bheader_deps\x18\n\x20\x03(\x0c\
+    R\nheaderDeps\"\xb1\x01\n\x19CKBSphincsPlusSignMessage\x12&\n\raccount_i\
+    ndex\x18\x01\x20\x01(\r:\x010R\x0caccountIndex\x12\x1c\n\x07variant\x18\
+    \x02\x20\x01(\r:\x0249R\x07variant\x12\x18\n\x07message\x18\x03\x20\x02(\
+    \x0cR\x07message\x12\x18\n\x07network\x18\x04\x20\x02(\tR\x07network\x12\
+    \x1a\n\x08chunkify\x18\x05\x20\x01(\x08R\x08chunkify\"s\n\x1eCKBSphincsP\
+    lusMessageSignature\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07address\
+    \x12\x1d\n\npublic_key\x18\x02\x20\x02(\x0cR\tpublicKey\x12\x18\n\x07var\
+    iant\x18\x03\x20\x02(\rR\x07variant\"\xf2\x01\n\x1bCKBSphincsPlusVerifyM\
+    essage\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07address\x12\x1d\n\npu\
+    blic_key\x18\x02\x20\x02(\x0cR\tpublicKey\x12\x18\n\x07message\x18\x03\
+    \x20\x02(\x0cR\x07message\x12\x18\n\x07variant\x18\x04\x20\x02(\rR\x07va\
+    riant\x12\x18\n\x07network\x18\x05\x20\x02(\tR\x07network\x120\n\x14sign\
+    ature_total_size\x18\x06\x20\x02(\rR\x12signatureTotalSize\x12\x1a\n\x08\
+    chunkify\x18\x07\x20\x01(\x08R\x08chunkify\"}\n\x0eCKBSignMessage\x12\
+    \x1b\n\taddress_n\x18\x01\x20\x03(\rR\x08addressN\x12\x18\n\x07message\
+    \x18\x02\x20\x02(\x0cR\x07message\x12\x18\n\x07network\x18\x03\x20\x02(\
+    \tR\x07network\x12\x1a\n\x08chunkify\x18\x04\x20\x01(\x08R\x08chunkify\"\
+    M\n\x13CKBMessageSignature\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07a\
+    ddress\x12\x1c\n\tsignature\x18\x02\x20\x02(\x0cR\tsignature\"\x9a\x01\n\
+    \x10CKBVerifyMessage\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07address\
+    \x12\x1c\n\tsignature\x18\x02\x20\x02(\x0cR\tsignature\x12\x18\n\x07mess\
+    age\x18\x03\x20\x02(\x0cR\x07message\x12\x18\n\x07network\x18\x04\x20\
+    \x02(\tR\x07network\x12\x1a\n\x08chunkify\x18\x05\x20\x01(\x08R\x08chunk\
+    ify\"\x86\x02\n\x0cCKBCellInput\x125\n\x17previous_output_tx_hash\x18\
+    \x01\x20\x02(\x0cR\x14previousOutputTxHash\x122\n\x15previous_output_ind\
+    ex\x18\x02\x20\x02(\rR\x13previousOutputIndex\x12\x17\n\x05since\x18\x03\
+    \x20\x01(\x04:\x010R\x05since\x127\n\x18dao_deposit_header_index\x18\x04\
+    \x20\x01(\rR\x15daoDepositHeaderIndex\x129\n\x19dao_withdraw_header_inde\
+    x\x18\x05\x20\x01(\rR\x16daoWithdrawHeaderIndex\"\x91\x02\n\rCKBCellOutp\
+    ut\x12\x1a\n\x08capacity\x18\x01\x20\x02(\x04R\x08capacity\x12$\n\x0eloc\
+    k_code_hash\x18\x02\x20\x02(\x0cR\x0clockCodeHash\x12$\n\x0elock_hash_ty\
+    pe\x18\x03\x20\x02(\rR\x0clockHashType\x12\x1b\n\tlock_args\x18\x04\x20\
+    \x02(\x0cR\x08lockArgs\x12$\n\x0etype_code_hash\x18\x05\x20\x01(\x0cR\
+    \x0ctypeCodeHash\x12$\n\x0etype_hash_type\x18\x06\x20\x01(\rR\x0ctypeHas\
+    hType\x12\x1b\n\ttype_args\x18\x07\x20\x01(\x0cR\x08typeArgs\x12\x12\n\
+    \x04data\x18\x08\x20\x01(\x0cR\x04data\"V\n\nCKBCellDep\x12\x17\n\x07tx_\
+    hash\x18\x01\x20\x02(\x0cR\x06txHash\x12\x14\n\x05index\x18\x02\x20\x02(\
+    \rR\x05index\x12\x19\n\x08dep_type\x18\x03\x20\x02(\rR\x07depType\"\xd4\
+    \x02\n\tCKBSignTx\x12\x1b\n\taddress_n\x18\x01\x20\x03(\rR\x08addressN\
+    \x12\x18\n\x07network\x18\x02\x20\x02(\tR\x07network\x12!\n\x0cinputs_co\
+    unt\x18\x03\x20\x02(\rR\x0binputsCount\x12#\n\routputs_count\x18\x04\x20\
+    \x02(\rR\x0coutputsCount\x12)\n\x0fcell_deps_count\x18\x05\x20\x01(\r:\
+    \x010R\rcellDepsCount\x12\x1a\n\x08chunkify\x18\x06\x20\x01(\x08R\x08chu\
+    nkify\x12'\n\x0fwitnesses_count\x18\x07\x20\x01(\rR\x0ewitnessesCount\
+    \x127\n\x18sign_group_input_indices\x18\x08\x20\x03(\rR\x15signGroupInpu\
+    tIndices\x12\x1f\n\x0bheader_deps\x18\t\x20\x03(\x0cR\nheaderDeps\"\xf2\
+    \x01\n\x0cCKBTxRequest\x12K\n\x0crequest_type\x18\x01\x20\x01(\x0e2(.hw.\
+    trezor.messages.ckb.CKBTxRequestTypeR\x0brequestType\x12E\n\x07details\
+    \x18\x02\x20\x01(\x0b2+.hw.trezor.messages.ckb.CKBTxRequestDetailsR\x07d\
+    etails\x12N\n\nserialized\x18\x03\x20\x01(\x0b2..hw.trezor.messages.ckb.\
+    CKBTxRequestSerializedR\nserialized\"\xb0\x01\n\x13CKBTxRequestDetails\
+    \x12#\n\rrequest_index\x18\x01\x20\x01(\rR\x0crequestIndex\x12\x17\n\x07\
+    tx_hash\x18\x02\x20\x01(\x0cR\x06txHash\x12)\n\x10signature_offset\x18\
+    \x03\x20\x01(\rR\x0fsignatureOffset\x120\n\x14signature_total_size\x18\
+    \x04\x20\x01(\rR\x12signatureTotalSize\"O\n\x16CKBTxRequestSerialized\
+    \x12\x1c\n\tsignature\x18\x01\x20\x01(\x0cR\tsignature\x12\x17\n\x07tx_h\
+    ash\x18\x02\x20\x01(\x0cR\x06txHash\"K\n\rCKBTxAckInput\x12:\n\x05input\
+    \x18\x01\x20\x02(\x0b2$.hw.trezor.messages.ckb.CKBCellInputR\x05input\"O\
+    \n\x0eCKBTxAckOutput\x12=\n\x06output\x18\x01\x20\x02(\x0b2%.hw.trezor.m\
+    essages.ckb.CKBCellOutputR\x06output\"P\n\x0fCKBTxAckCellDep\x12=\n\x08c\
+    ell_dep\x18\x01\x20\x02(\x0b2\".hw.trezor.messages.ckb.CKBCellDepR\x07ce\
+    llDep\"\xc0\x01\n\x10CKBTxAckPrevMeta\x12\x18\n\x07version\x18\x01\x20\
+    \x02(\rR\x07version\x12!\n\x0cinputs_count\x18\x02\x20\x02(\rR\x0binputs\
+    Count\x12#\n\routputs_count\x18\x03\x20\x02(\rR\x0coutputsCount\x12)\n\
+    \x0fcell_deps_count\x18\x04\x20\x01(\r:\x010R\rcellDepsCount\x12\x1f\n\
+    \x0bheader_deps\x18\x05\x20\x03(\x0cR\nheaderDeps\"\xd9\x02\n\x0eCKBBloc\
+    kHeader\x12\x18\n\x07version\x18\x01\x20\x02(\rR\x07version\x12%\n\x0eco\
+    mpact_target\x18\x02\x20\x02(\rR\rcompactTarget\x12\x1c\n\ttimestamp\x18\
+    \x03\x20\x02(\x04R\ttimestamp\x12\x16\n\x06number\x18\x04\x20\x02(\x04R\
+    \x06number\x12\x14\n\x05epoch\x18\x05\x20\x02(\x04R\x05epoch\x12\x1f\n\
+    \x0bparent_hash\x18\x06\x20\x02(\x0cR\nparentHash\x12+\n\x11transactions\
+    _root\x18\x07\x20\x02(\x0cR\x10transactionsRoot\x12%\n\x0eproposals_hash\
+    \x18\x08\x20\x02(\x0cR\rproposalsHash\x12\x1d\n\nextra_hash\x18\t\x20\
+    \x02(\x0cR\textraHash\x12\x10\n\x03dao\x18\n\x20\x02(\x0cR\x03dao\x12\
+    \x14\n\x05nonce\x18\x0b\x20\x02(\x0cR\x05nonce\"P\n\x0eCKBTxAckHeader\
+    \x12>\n\x06header\x18\x01\x20\x02(\x0b2&.hw.trezor.messages.ckb.CKBBlock\
+    HeaderR\x06header\"q\n\x0eCKBWitnessArgs\x12\x1f\n\tlock_size\x18\x01\
+    \x20\x01(\r:\x0265R\x08lockSize\x12\x1d\n\ninput_type\x18\x02\x20\x01(\
+    \x0cR\tinputType\x12\x1f\n\x0boutput_type\x18\x03\x20\x01(\x0cR\noutputT\
+    ype\"n\n\x0fCKBTxAckWitness\x12I\n\x0cwitness_args\x18\x01\x20\x01(\x0b2\
+    &.hw.trezor.messages.ckb.CKBWitnessArgsR\x0bwitnessArgs\x12\x10\n\x03raw\
+    \x18\x02\x20\x01(\x0cR\x03raw\"0\n\x10CKBTxAckSigChunk\x12\x1c\n\tsignat\
+    ure\x18\x01\x20\x01(\x0cR\tsignature*\xbf\x01\n\x10CKBTxRequestType\x12\
+    \x0b\n\x07TXINPUT\x10\0\x12\x0c\n\x08TXOUTPUT\x10\x01\x12\r\n\tTXCELLDEP\
+    \x10\x02\x12\x0e\n\nTXFINISHED\x10\x03\x12\r\n\tTXWITNESS\x10\x04\x12\
+    \x0e\n\nTXPREVMETA\x10\x05\x12\x0f\n\x0bTXPREVINPUT\x10\x06\x12\x10\n\
+    \x0cTXPREVOUTPUT\x10\x07\x12\x11\n\rTXPREVCELLDEP\x10\x08\x12\x0c\n\x08T\
+    XHEADER\x10\t\x12\x0e\n\nTXSIGCHUNK\x10\nB7\n#com.satoshilabs.trezor.lib\
+    .protobufB\x10TrezorMessageCKB\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -6971,7 +7878,7 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
     file_descriptor.get(|| {
         let generated_file_descriptor = generated_file_descriptor_lazy.get(|| {
             let mut deps = ::std::vec::Vec::with_capacity(0);
-            let mut messages = ::std::vec::Vec::with_capacity(25);
+            let mut messages = ::std::vec::Vec::with_capacity(27);
             messages.push(CKBGetAddress::generated_message_descriptor_data());
             messages.push(CKBAddress::generated_message_descriptor_data());
             messages.push(CKBSphincsPlusGetAddress::generated_message_descriptor_data());
@@ -6994,6 +7901,8 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
             messages.push(CKBTxAckOutput::generated_message_descriptor_data());
             messages.push(CKBTxAckCellDep::generated_message_descriptor_data());
             messages.push(CKBTxAckPrevMeta::generated_message_descriptor_data());
+            messages.push(CKBBlockHeader::generated_message_descriptor_data());
+            messages.push(CKBTxAckHeader::generated_message_descriptor_data());
             messages.push(CKBWitnessArgs::generated_message_descriptor_data());
             messages.push(CKBTxAckWitness::generated_message_descriptor_data());
             messages.push(CKBTxAckSigChunk::generated_message_descriptor_data());

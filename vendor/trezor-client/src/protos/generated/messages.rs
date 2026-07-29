@@ -617,6 +617,8 @@ pub enum MessageType {
     MessageType_CKBTxAckWitness = 5510,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_CKBTxAckPrevMeta)
     MessageType_CKBTxAckPrevMeta = 5511,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_CKBTxAckHeader)
+    MessageType_CKBTxAckHeader = 5512,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_CKBSphincsPlusGetAddress)
     MessageType_CKBSphincsPlusGetAddress = 5520,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_CKBSphincsPlusAddress)
@@ -949,6 +951,7 @@ impl ::protobuf::Enum for MessageType {
             5509 => ::std::option::Option::Some(MessageType::MessageType_CKBVerifyMessage),
             5510 => ::std::option::Option::Some(MessageType::MessageType_CKBTxAckWitness),
             5511 => ::std::option::Option::Some(MessageType::MessageType_CKBTxAckPrevMeta),
+            5512 => ::std::option::Option::Some(MessageType::MessageType_CKBTxAckHeader),
             5520 => ::std::option::Option::Some(MessageType::MessageType_CKBSphincsPlusGetAddress),
             5521 => ::std::option::Option::Some(MessageType::MessageType_CKBSphincsPlusAddress),
             5522 => ::std::option::Option::Some(MessageType::MessageType_CKBSphincsPlusSignTx),
@@ -1263,6 +1266,7 @@ impl ::protobuf::Enum for MessageType {
             "MessageType_CKBVerifyMessage" => ::std::option::Option::Some(MessageType::MessageType_CKBVerifyMessage),
             "MessageType_CKBTxAckWitness" => ::std::option::Option::Some(MessageType::MessageType_CKBTxAckWitness),
             "MessageType_CKBTxAckPrevMeta" => ::std::option::Option::Some(MessageType::MessageType_CKBTxAckPrevMeta),
+            "MessageType_CKBTxAckHeader" => ::std::option::Option::Some(MessageType::MessageType_CKBTxAckHeader),
             "MessageType_CKBSphincsPlusGetAddress" => ::std::option::Option::Some(MessageType::MessageType_CKBSphincsPlusGetAddress),
             "MessageType_CKBSphincsPlusAddress" => ::std::option::Option::Some(MessageType::MessageType_CKBSphincsPlusAddress),
             "MessageType_CKBSphincsPlusSignTx" => ::std::option::Option::Some(MessageType::MessageType_CKBSphincsPlusSignTx),
@@ -1576,6 +1580,7 @@ impl ::protobuf::Enum for MessageType {
         MessageType::MessageType_CKBVerifyMessage,
         MessageType::MessageType_CKBTxAckWitness,
         MessageType::MessageType_CKBTxAckPrevMeta,
+        MessageType::MessageType_CKBTxAckHeader,
         MessageType::MessageType_CKBSphincsPlusGetAddress,
         MessageType::MessageType_CKBSphincsPlusAddress,
         MessageType::MessageType_CKBSphincsPlusSignTx,
@@ -1895,19 +1900,20 @@ impl ::protobuf::EnumFull for MessageType {
             MessageType::MessageType_CKBVerifyMessage => 292,
             MessageType::MessageType_CKBTxAckWitness => 293,
             MessageType::MessageType_CKBTxAckPrevMeta => 294,
-            MessageType::MessageType_CKBSphincsPlusGetAddress => 295,
-            MessageType::MessageType_CKBSphincsPlusAddress => 296,
-            MessageType::MessageType_CKBSphincsPlusSignTx => 297,
-            MessageType::MessageType_CKBTxAckSigChunk => 298,
-            MessageType::MessageType_CKBSphincsPlusSignMessage => 299,
-            MessageType::MessageType_CKBSphincsPlusMessageSignature => 300,
-            MessageType::MessageType_CKBSphincsPlusVerifyMessage => 301,
-            MessageType::MessageType_BenchmarkListNames => 302,
-            MessageType::MessageType_BenchmarkNames => 303,
-            MessageType::MessageType_BenchmarkRun => 304,
-            MessageType::MessageType_BenchmarkResult => 305,
-            MessageType::MessageType_TelemetryGet => 306,
-            MessageType::MessageType_Telemetry => 307,
+            MessageType::MessageType_CKBTxAckHeader => 295,
+            MessageType::MessageType_CKBSphincsPlusGetAddress => 296,
+            MessageType::MessageType_CKBSphincsPlusAddress => 297,
+            MessageType::MessageType_CKBSphincsPlusSignTx => 298,
+            MessageType::MessageType_CKBTxAckSigChunk => 299,
+            MessageType::MessageType_CKBSphincsPlusSignMessage => 300,
+            MessageType::MessageType_CKBSphincsPlusMessageSignature => 301,
+            MessageType::MessageType_CKBSphincsPlusVerifyMessage => 302,
+            MessageType::MessageType_BenchmarkListNames => 303,
+            MessageType::MessageType_BenchmarkNames => 304,
+            MessageType::MessageType_BenchmarkRun => 305,
+            MessageType::MessageType_BenchmarkResult => 306,
+            MessageType::MessageType_TelemetryGet => 307,
+            MessageType::MessageType_Telemetry => 308,
         };
         Self::enum_descriptor().value_by_index(index)
     }
@@ -1926,7 +1932,7 @@ impl MessageType {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xfdk\
+    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xa4l\
     \n\x0bMessageType\x12(\n\x16MessageType_Initialize\x10\0\x1a\x0c\xb0\xb5\
     \x18\x01\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12\x1e\n\x10MessageType_Ping\
     \x10\x01\x1a\x08\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12%\n\x13MessageType_S\
@@ -2264,6 +2270,7 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \xb5\x18\x01\x12'\n\x1cMessageType_CKBVerifyMessage\x10\x85+\x1a\x04\x90\
     \xb5\x18\x01\x12&\n\x1bMessageType_CKBTxAckWitness\x10\x86+\x1a\x04\x90\
     \xb5\x18\x01\x12'\n\x1cMessageType_CKBTxAckPrevMeta\x10\x87+\x1a\x04\x90\
+    \xb5\x18\x01\x12%\n\x1aMessageType_CKBTxAckHeader\x10\x88+\x1a\x04\x90\
     \xb5\x18\x01\x12/\n$MessageType_CKBSphincsPlusGetAddress\x10\x90+\x1a\
     \x04\x90\xb5\x18\x01\x12,\n!MessageType_CKBSphincsPlusAddress\x10\x91+\
     \x1a\x04\x98\xb5\x18\x01\x12+\n\x20MessageType_CKBSphincsPlusSignTx\x10\

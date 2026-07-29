@@ -1,42 +1,42 @@
-//! Trezor Host Protocol (THP v2) transport.
+//! Trezor Host Protocol (THP v2) session.
 //!
 //! The Safe 7 firmware speaks THP only (it rejects Protocol v1 with
 //! `Failure_InvalidProtocol` at the handshake), so device access goes through an
 //! encrypted Noise session rather than the legacy `trezor-client`. This module
 //! ports the reference host loop from `vendor/trezor-thp/examples/host-cli`
 //! (channel allocation → Noise handshake → skip-pairing → encrypted `call`) and
-//! sends our existing CKB protobuf messages as raw bytes over it.
+//! sends our existing CKB protobuf messages as raw bytes over it. The session
+//! runs over either packet transport in [`transport`]: UDP to the emulator or
+//! USB to a physical device.
 
 #[allow(clippy::all)]
 mod pb;
 
 mod client;
-
-use std::net::SocketAddr;
+mod cpace;
+pub(crate) mod pairing;
+pub(crate) mod transport;
 
 use protobuf::Message;
+use trezor_client::protos::MessageType as TcMessageType;
 use trezor_thp::channel::host::{Channel, Mux};
-use trezor_thp::credential::NullCredentialStore;
 use trezor_thp::Backend;
 
 use client::Client;
-use pb::messages_thp::{
-    ThpDeviceProperties, ThpEndResponse, ThpMessageType, ThpPairingMethod, ThpPairingRequest,
-    ThpPairingRequestApproved, ThpSelectMethod,
-};
+use pairing::{HostIdentity, PairingUx};
+use pb::messages_thp::ThpDeviceProperties;
 
 use qpv2_core::types::{MultisigConfig, SpxVariant};
 
 use crate::device::{network_name, DeviceAddress, TREZOR_CONVENTION};
+use crate::thp::transport::Transport;
 use crate::TrezorSignerError;
 
-/// Default emulator UDP port.
-const DEFAULT_UDP_PORT: u16 = 21324;
-
-/// CKB SPHINCS+ wire message-type ids (from the firmware `messages.proto`).
-const MSG_FAILURE: u16 = 3;
-const MSG_CKB_SPHINCS_GET_ADDRESS: u16 = 5520;
-const MSG_CKB_SPHINCS_ADDRESS: u16 = 5521;
+/// CKB SPHINCS+ wire message-type ids, derived from the generated protobuf
+/// enum so they cannot drift from the firmware's `messages.proto`.
+const MSG_FAILURE: u16 = TcMessageType::MessageType_Failure as u16;
+const MSG_CKB_SPHINCS_GET_ADDRESS: u16 = TcMessageType::MessageType_CKBSphincsPlusGetAddress as u16;
+const MSG_CKB_SPHINCS_ADDRESS: u16 = TcMessageType::MessageType_CKBSphincsPlusAddress as u16;
 
 /// Noise crypto backend for THP: X25519 + AES-256-GCM + SHA-256, matching the
 /// device. Mirrors the reference example's backend.
@@ -58,23 +58,41 @@ pub(crate) struct ThpSession {
 }
 
 impl ThpSession {
-    /// Connect to the local emulator and run the full THP bring-up:
-    /// channel allocation, Noise handshake, and skip-pairing.
-    pub(crate) fn connect() -> Result<Self, TrezorSignerError> {
-        let addr = SocketAddr::from(([127, 0, 0, 1], DEFAULT_UDP_PORT));
+    /// Run the full THP bring-up over an established packet transport: channel
+    /// allocation, Noise handshake (presenting any stored pairing credential),
+    /// and — unless the credential already got us `Paired` — the pairing phase
+    /// (skip-pairing on dev firmware, CodeEntry on production firmware).
+    pub(crate) fn connect(
+        transport: Box<dyn Transport>,
+        ux: &mut dyn PairingUx,
+    ) -> Result<Self, TrezorSignerError> {
+        let mut identity = HostIdentity::load_or_create();
 
         let mut mux = Mux::<RustCrypto>::new();
         mux.request_channel(false);
-        let mut client = Client::open(addr, mux)?;
+        let mut client = Client::open(transport, mux);
 
-        // 1. Channel allocation.
-        client.call(0, &[])?;
+        // 1. Channel allocation. Probed with a short timeout: a live peer
+        // answers in milliseconds with no user interaction, so a dead
+        // emulator port or unresponsive device fails in ~2s instead of
+        // stalling the full read timeout. Restored right after — later steps
+        // legitimately wait on on-device confirmations.
+        client.set_read_timeout(client::CONNECT_PROBE_TIMEOUT);
+        client.call(0, &[]).map_err(|e| {
+            log::debug!("channel allocation failed: {e}");
+            TrezorSignerError::Client(
+                "no Trezor is responding — is the device plugged in and unlocked, \
+                 or the emulator running?"
+                    .to_string(),
+            )
+        })?;
+        client.set_read_timeout(client::READ_TIMEOUT);
         if !client.channel.channel_alloc_ready() {
             return Err(TrezorSignerError::Protocol(
                 "channel allocation failed".into(),
             ));
         }
-        let mut client = client.try_map(|c| c.complete(NullCredentialStore))?;
+        let mut client = client.try_map(|c| c.complete(identity.credential_store()))?;
 
         // 2. Noise handshake (device properties carry the protocol version).
         client.device_properties = client.channel.device_properties().into();
@@ -93,8 +111,14 @@ impl ThpSession {
         }
         let mut client = client.try_map(|c| c.complete())?;
 
-        // 3. Pairing — the emulator/host pair is unauthenticated (skip-pairing).
-        do_pairing(&mut client, &props)?;
+        // 3. Pairing. When the stored credential was accepted the device sits
+        // in its credential phase — confirm the connection and end it; a full
+        // pairing (skip or CodeEntry) runs only on unpaired channels.
+        if client.channel.handshake_pairing_state().is_paired() {
+            pairing::finish_credential_phase(&mut client)?;
+        } else {
+            pairing::run_pairing(&mut client, &props, ux, &mut identity)?;
+        }
 
         Ok(ThpSession { client })
     }
@@ -174,41 +198,4 @@ impl ThpSession {
 
         Ok(out)
     }
-}
-
-/// Skip-pairing: the emulator advertises `SkipPairing`, so we request pairing
-/// and immediately select the no-authentication method.
-fn do_pairing(
-    client: &mut Client<Channel<RustCrypto>>,
-    props: &ThpDeviceProperties,
-) -> Result<(), TrezorSignerError> {
-    let supports_skip = props
-        .pairing_methods
-        .iter()
-        .filter_map(|p| p.enum_value().ok())
-        .any(|m| m == ThpPairingMethod::SkipPairing);
-    if !supports_skip {
-        return Err(TrezorSignerError::Protocol(
-            "device does not support skip-pairing".into(),
-        ));
-    }
-
-    let mut request = ThpPairingRequest::new();
-    request.set_host_name("QuantumPurse".into());
-    request.set_app_name("quantum-purse".into());
-    let _approved: ThpPairingRequestApproved = client.call_pb(
-        ThpMessageType::ThpMessageType_ThpPairingRequest,
-        request,
-        ThpMessageType::ThpMessageType_ThpPairingRequestApproved,
-    )?;
-
-    let mut select = ThpSelectMethod::new();
-    select.set_selected_pairing_method(ThpPairingMethod::SkipPairing);
-    let _end: ThpEndResponse = client.call_pb(
-        ThpMessageType::ThpMessageType_ThpSelectMethod,
-        select,
-        ThpMessageType::ThpMessageType_ThpEndResponse,
-    )?;
-
-    Ok(())
 }

@@ -1,4 +1,5 @@
-//! The SPHINCS+ `sign_tx` streaming state machine.
+//! This file contains the host-side implementation to allow
+//! data streaming between quantumpurse(host) and Trezor device.
 //!
 //! Ported from the firmware's reference host loop
 //! (`python/src/trezorlib/ckb.py::sign_tx`). The host sends the transaction
@@ -10,7 +11,10 @@
 
 use std::collections::HashMap;
 
-use ckb_types::{core::TransactionView, H256};
+use ckb_types::{
+    core::{HeaderView, TransactionView},
+    H256,
+};
 use protobuf::{Enum, Message, MessageField};
 use trezor_client::protos::{self, CKBTxRequestType};
 use trezor_client::TrezorMessage;
@@ -21,8 +25,9 @@ use crate::TrezorSignerError;
 
 use qpv2_core::types::SpxVariant;
 
-/// Wire message-type id of the device's `CKBTxRequest` reply.
-const MSG_CKB_TX_REQUEST: u16 = 5503;
+/// Wire message-type id of the device's `CKBTxRequest` reply, derived from
+/// the generated protobuf enum so it cannot drift from the firmware proto.
+const MSG_CKB_TX_REQUEST: u16 = protos::MessageType::MessageType_CKBTxRequest as u16;
 
 /// The result of a device signing round-trip.
 #[derive(Debug, Clone)]
@@ -55,7 +60,35 @@ impl TrezorDevice {
         prev_txs: &HashMap<H256, TransactionView>,
         sign_group_input_indices: &[u32],
     ) -> Result<SignedWitness, TrezorSignerError> {
-        let inputs = crate::conv::inputs_of(unsigned_tx);
+        self.sign_tx_with_context(
+            account_index,
+            variant,
+            is_mainnet,
+            unsigned_tx,
+            signing_lock_size,
+            prev_txs,
+            &HashMap::new(),
+            &[],
+            sign_group_input_indices,
+        )
+    }
+
+    /// Sign with the additional committed-block and header context required by
+    /// Nervos DAO phase-2 inputs.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sign_tx_with_context(
+        &mut self,
+        account_index: u32,
+        variant: SpxVariant,
+        is_mainnet: bool,
+        unsigned_tx: &TransactionView,
+        signing_lock_size: usize,
+        prev_txs: &HashMap<H256, TransactionView>,
+        prev_tx_block_hashes: &HashMap<H256, H256>,
+        headers: &[HeaderView],
+        sign_group_input_indices: &[u32],
+    ) -> Result<SignedWitness, TrezorSignerError> {
+        let inputs = crate::conv::resolved_inputs_of(unsigned_tx, prev_txs, prev_tx_block_hashes)?;
         let outputs = crate::conv::outputs_of(unsigned_tx);
         let cell_deps = crate::conv::cell_deps_of(unsigned_tx);
         let witnesses = unsigned_tx.witnesses();
@@ -71,6 +104,9 @@ impl TrezorDevice {
         kickoff.set_cell_deps_count(cell_deps.len() as u32);
         kickoff.set_witnesses_count(witnesses_count as u32);
         kickoff.sign_group_input_indices = sign_group_input_indices.to_vec();
+        // header_deps are committed in the tx hash, so the device must know
+        // them to recompute it (empty for plain transfers).
+        kickoff.header_deps = crate::conv::header_deps_of(unsigned_tx);
 
         let mut request = call(&mut self.session, kickoff)?;
         let mut sig_buf: Vec<u8> = Vec::new();
@@ -154,6 +190,15 @@ impl TrezorDevice {
                     let cell_deps = crate::conv::cell_deps_of(prev);
                     let mut ack = protos::CKBTxAckCellDep::new();
                     ack.cell_dep = MessageField::some(nth(&cell_deps, idx, "prev cell_dep")?);
+                    request = call(&mut self.session, ack)?;
+                }
+                CKBTxRequestType::TXHEADER => {
+                    let idx = request_index(&request)?;
+                    let header = headers.get(idx).ok_or_else(|| {
+                        protocol(format!("header dependency index {idx} out of range"))
+                    })?;
+                    let mut ack = protos::CKBTxAckHeader::new();
+                    ack.header = MessageField::some(crate::conv::block_header(header));
                     request = call(&mut self.session, ack)?;
                 }
                 CKBTxRequestType::TXSIGCHUNK => {

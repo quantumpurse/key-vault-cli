@@ -44,8 +44,11 @@ impl App {
         let c = &self.colors;
         match &self.status {
             Status::None => {}
+            // `horizontal_wrapped` so long messages wrap at the caller's
+            // allocated width (e.g. the setup panel) instead of running past
+            // it — plain `horizontal` lets labels extend unbounded.
             Status::Info(msg) => {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         egui::RichText::new("[ OK ]")
                             .font(label_font(10.0))
@@ -55,7 +58,7 @@ impl App {
                 });
             }
             Status::Error(msg) => {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         egui::RichText::new("[ERR ]")
                             .font(label_font(10.0))

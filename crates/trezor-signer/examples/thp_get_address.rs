@@ -1,15 +1,16 @@
-//! Manual THP smoke test: connect to the emulator and export account 0.
+//! Manual THP smoke test: connect (USB device if plugged in, else the
+//! emulator) and export account 0.
 //!
 //!   RUST_LOG=info cargo run -p trezor-signer --example thp_get_address
 //!
-//! Confirm the address export on the emulator when prompted.
+//! Confirm the address export on the device/emulator when prompted.
 
 use qpv2_core::types::SpxVariant;
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
     println!("connecting to Trezor over THP...");
-    let mut device = trezor_signer::open().expect("connect");
+    let mut device = trezor_signer::open(&mut trezor_signer::StdinPairing).expect("connect");
     println!("connected: {}", device.model());
     println!("requesting account 0 address (confirm on the emulator)...");
     let addr = device

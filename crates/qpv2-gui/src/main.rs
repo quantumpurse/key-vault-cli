@@ -358,6 +358,12 @@ impl App {
                 save_last_wallet_id(wid);
 
                 let am = KeyVault::read_wallet_info(wid).ok().map(|w| w.auth_method);
+                // Password is the only method with no lock/unlock UX: its
+                // passwords are 20+ characters, too much friction to demand
+                // just to see balances, and every operation prompts anyway.
+                // Every other method opens through the Locked screen, which
+                // renders the unlock action it needs — a keychain/FIDO2 prompt,
+                // or a plain open for watch-only Trezor wallets.
                 if matches!(am, Some(qpv2_core::types::AuthMethod::Password)) {
                     let accs = KeyVault::get_all_accounts(wid).unwrap_or_default();
                     (Screen::Unlocked, wid, wname, am, accs, true)

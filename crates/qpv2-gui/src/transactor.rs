@@ -623,21 +623,26 @@ impl App {
             let result = (|| -> Result<String, String> {
                 let sign_group: Vec<u32> = (0..unsigned_tx.inputs().len() as u32).collect();
 
-                let prev_txs =
-                    ckb_node::wallet_helpers::tx_builder::fetch_prev_txs(&qp_client, &unsigned_tx)
-                        .map_err(|e| format!("Failed to fetch previous transactions: {}", e))?;
+                let signing_context =
+                    ckb_node::wallet_helpers::tx_builder::fetch_hardware_signing_context(
+                        &qp_client,
+                        &unsigned_tx,
+                    )
+                    .map_err(|e| format!("Failed to fetch Trezor signing context: {}", e))?;
 
-                let mut device = trezor_signer::open()
+                let mut device = trezor_signer::open(&mut trezor_signer::PinentryPairing)
                     .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
 
                 let signed = device
-                    .sign_tx(
+                    .sign_tx_with_context(
                         account_index,
                         variant,
                         is_mainnet,
                         &unsigned_tx,
                         signing_lock_size,
-                        &prev_txs,
+                        &signing_context.prev_txs,
+                        &signing_context.prev_tx_block_hashes,
+                        &signing_context.headers,
                         &sign_group,
                     )
                     .map_err(|e| format!("Trezor signing failed: {}", e))?;

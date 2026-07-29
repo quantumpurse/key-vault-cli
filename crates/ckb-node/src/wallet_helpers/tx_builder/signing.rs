@@ -5,15 +5,26 @@
 //! 2. Fill a signed witness into a transaction.
 //! 3. Send a signed transaction via RPC.
 
-use crate::client::QpClient;
+use crate::client::{QpClient, TransactionStatus};
 use crate::error::NodeManagerError;
 use ckb_types::{
     bytes::Bytes,
-    core::TransactionView,
+    core::{HeaderView, TransactionView},
     packed::{CellOutput, WitnessArgs},
     prelude::*,
     H256,
 };
+
+/// Chain data a hardware signer needs to verify transaction inputs and DAO
+/// header dependencies without trusting host-supplied capacities.
+pub struct HardwareSigningContext {
+    /// Full transaction for every input's previous-output transaction hash.
+    pub prev_txs: std::collections::HashMap<H256, TransactionView>,
+    /// Block that committed each previous transaction, when available.
+    pub prev_tx_block_hashes: std::collections::HashMap<H256, H256>,
+    /// Full headers in exactly the same order as the transaction's header deps.
+    pub headers: Vec<HeaderView>,
+}
 
 /// Computes the 32-byte CKB_TX_MESSAGE_ALL hash for a given unsigned transaction.
 ///
@@ -171,6 +182,28 @@ pub fn assemble_multisig_witness(
     Ok(lock)
 }
 
+/// TODO optimize
+/// `QpClient::get_transaction` with a short retry backoff. A lost RPC
+/// request in the signing path aborts the whole flow (the user has to
+/// rebuild and reconfirm the transaction), and public RPC endpoints drop
+/// requests now and then — transient transport errors are worth absorbing.
+fn get_transaction_with_retry(
+    qp_client: &QpClient,
+    tx_hash: &H256,
+) -> Result<Option<TransactionStatus>, NodeManagerError> {
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        match qp_client.get_transaction(tx_hash.clone()) {
+            Ok(status) => return Ok(status),
+            Err(_) if attempt < 4 => {
+                std::thread::sleep(std::time::Duration::from_millis(500 * u64::from(attempt)))
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// Fetches the input cells (CellOutput + data) for every input in a transaction.
 ///
 /// This data is required by `generate_ckb_tx_message_all` to compute the
@@ -186,7 +219,7 @@ pub fn fetch_input_cells(
         let tx_hash: H256 = out_point.tx_hash().unpack();
         let index: u32 = out_point.index().unpack();
 
-        let tx_status = qp_client.get_transaction(tx_hash.clone())?.ok_or_else(|| {
+        let tx_status = get_transaction_with_retry(qp_client, &tx_hash)?.ok_or_else(|| {
             NodeManagerError::RpcError(format!("Input transaction {} not found.", tx_hash))
         })?;
 
@@ -248,7 +281,7 @@ pub fn fetch_prev_txs(
             continue;
         }
 
-        let tx_status = qp_client.get_transaction(tx_hash.clone())?.ok_or_else(|| {
+        let tx_status = get_transaction_with_retry(qp_client, &tx_hash)?.ok_or_else(|| {
             NodeManagerError::RpcError(format!("Input transaction {} not found.", tx_hash))
         })?;
         let prev_tx_view = tx_status.transaction.ok_or_else(|| {
@@ -262,6 +295,62 @@ pub fn fetch_prev_txs(
     }
 
     Ok(prev_txs)
+}
+
+/// Fetch all chain data needed by the Trezor streaming protocol.
+///
+/// Besides the full previous transactions, DAO phase-2 signing needs the block
+/// that committed each spent phase-1 transaction and every full header named by
+/// the transaction's `header_deps`.
+pub fn fetch_hardware_signing_context(
+    qp_client: &QpClient,
+    tx: &TransactionView,
+) -> Result<HardwareSigningContext, NodeManagerError> {
+    let mut prev_txs = std::collections::HashMap::new();
+    let mut prev_tx_block_hashes = std::collections::HashMap::new();
+
+    for input in tx.inputs().into_iter() {
+        let tx_hash: H256 = input.previous_output().tx_hash().unpack();
+        if prev_txs.contains_key(&tx_hash) {
+            continue;
+        }
+
+        let tx_status = get_transaction_with_retry(qp_client, &tx_hash)?.ok_or_else(|| {
+            NodeManagerError::RpcError(format!("Input transaction {} not found.", tx_hash))
+        })?;
+        let block_hash = tx_status.block_hash.clone();
+        let prev_tx_view = tx_status.transaction.ok_or_else(|| {
+            NodeManagerError::RpcError(format!("Input transaction {} has no data.", tx_hash))
+        })?;
+        let packed: ckb_types::packed::Transaction = prev_tx_view.inner.into();
+        prev_txs.insert(tx_hash.clone(), packed.into_view());
+        if let Some(block_hash) = block_hash {
+            prev_tx_block_hashes.insert(tx_hash, block_hash);
+        }
+    }
+
+    let mut headers = Vec::with_capacity(tx.header_deps().len());
+    for packed_hash in tx.header_deps().into_iter() {
+        let hash: H256 = packed_hash.unpack();
+        let json_header = qp_client.get_header(hash.clone())?.ok_or_else(|| {
+            NodeManagerError::RpcError(format!("Header dependency {} not found.", hash))
+        })?;
+        let header: HeaderView = json_header.into();
+        let actual: H256 = header.hash().unpack();
+        if actual != hash {
+            return Err(NodeManagerError::RpcError(format!(
+                "Header dependency hash mismatch: requested {}, received {}.",
+                hash, actual
+            )));
+        }
+        headers.push(header);
+    }
+
+    Ok(HardwareSigningContext {
+        prev_txs,
+        prev_tx_block_hashes,
+        headers,
+    })
 }
 
 /// Replaces the placeholder witness at the given index with the signed witness data.

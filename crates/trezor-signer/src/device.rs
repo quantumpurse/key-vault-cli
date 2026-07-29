@@ -3,8 +3,14 @@
 //! The device is driven over THP (see [`crate::thp`]); this module holds the
 //! public handle and the shared address/convention types.
 
+use std::net::SocketAddr;
+
 use qpv2_core::types::{SingleSigConvention, SpxVariant};
 
+use crate::thp::pairing::{NoInteraction, PairingUx};
+use crate::thp::transport::{
+    scan_usb, Transport, UdpTransport, UsbLocation, UsbTransport, EMULATOR_PORT,
+};
 use crate::thp::ThpSession;
 use crate::TrezorSignerError;
 
@@ -14,6 +20,23 @@ use crate::TrezorSignerError;
 /// (`required_first_n = 1`) here would derive a different lock script and address.
 pub const TREZOR_CONVENTION: SingleSigConvention = SingleSigConvention::V1;
 
+/// Where a discovered device lives — determines the transport used to reach it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceLocation {
+    /// The local firmware emulator, over UDP loopback.
+    Emulator {
+        /// Emulator UDP port (default 21324).
+        port: u16,
+    },
+    /// A physical device on the USB bus.
+    Usb {
+        /// libusb bus number.
+        bus: u8,
+        /// libusb device address on that bus.
+        address: u8,
+    },
+}
+
 /// A device visible to the host.
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
@@ -21,8 +44,8 @@ pub struct DeviceInfo {
     pub label: String,
     /// Model name.
     pub model: String,
-    /// Whether this is the local emulator.
-    pub is_emulator: bool,
+    /// How to reach the device; pass to [`open_device`].
+    pub location: DeviceLocation,
 }
 
 /// A SPHINCS+ address exported from the device.
@@ -52,20 +75,84 @@ pub(crate) fn network_name(is_mainnet: bool) -> &'static str {
     }
 }
 
-/// The devices the host can reach. THP has no cheap enumeration (a probe is a
-/// full connect), so this advertises the local emulator endpoint.
+/// The devices the host can reach: every Trezor enumerated on the USB bus,
+/// plus the local emulator endpoint (which is advertised unconditionally —
+/// probing it would cost a full THP connect).
 pub fn list_devices() -> Vec<DeviceInfo> {
-    vec![DeviceInfo {
-        label: "Trezor (THP, 127.0.0.1:21324)".to_string(),
+    let mut devices: Vec<DeviceInfo> = scan_usb()
+        .into_iter()
+        .map(|loc| DeviceInfo {
+            label: format!("Trezor (USB bus {} addr {})", loc.bus, loc.address),
+            model: "Trezor".to_string(),
+            location: DeviceLocation::Usb {
+                bus: loc.bus,
+                address: loc.address,
+            },
+        })
+        .collect();
+    devices.push(DeviceInfo {
+        label: format!("Trezor emulator (UDP 127.0.0.1:{EMULATOR_PORT})"),
         model: "Trezor".to_string(),
-        is_emulator: true,
-    }]
+        location: DeviceLocation::Emulator {
+            port: EMULATOR_PORT,
+        },
+    });
+    devices
 }
 
-/// Open a THP session with the device (currently the local emulator).
-pub fn open() -> Result<TrezorDevice, TrezorSignerError> {
+/// Open the first reachable device: a physical Trezor if one is on the USB
+/// bus, otherwise the local emulator. Set `QPV2_TREZOR_EMULATOR=1` to skip
+/// the USB scan and force the emulator.
+///
+/// A first-time connection to production firmware runs code-entry pairing;
+/// `ux` supplies the 6-digit code the device displays. Paired devices skip
+/// the code entry via the stored credential, but still show a "Connect?"
+/// confirmation on the device each session (the credential is not the
+/// autoconnect kind).
+pub fn open(ux: &mut dyn PairingUx) -> Result<TrezorDevice, TrezorSignerError> {
+    if std::env::var_os("QPV2_TREZOR_EMULATOR").is_none() {
+        if let Some(loc) = scan_usb().into_iter().next() {
+            return open_transport(Box::new(UsbTransport::connect(loc)?), ux);
+        }
+    }
+    open_transport(emulator_transport(EMULATOR_PORT)?, ux)
+}
+
+/// Open a specific device previously returned by [`list_devices`].
+pub fn open_device(
+    info: &DeviceInfo,
+    ux: &mut dyn PairingUx,
+) -> Result<TrezorDevice, TrezorSignerError> {
+    let transport: Box<dyn Transport> = match info.location {
+        DeviceLocation::Usb { bus, address } => {
+            Box::new(UsbTransport::connect(UsbLocation { bus, address })?)
+        }
+        DeviceLocation::Emulator { port } => emulator_transport(port)?,
+    };
+    open_transport(transport, ux)
+}
+
+/// Open the local firmware emulator on the default port. Dev builds of the
+/// emulator advertise skip-pairing, so no interaction is needed; a
+/// production-build emulator would demand code entry, which [`NoInteraction`]
+/// turns into a clear error.
+pub fn open_emulator() -> Result<TrezorDevice, TrezorSignerError> {
+    open_transport(emulator_transport(EMULATOR_PORT)?, &mut NoInteraction)
+}
+
+fn emulator_transport(port: u16) -> Result<Box<dyn Transport>, TrezorSignerError> {
+    Ok(Box::new(UdpTransport::connect(SocketAddr::from((
+        [127, 0, 0, 1],
+        port,
+    )))?))
+}
+
+fn open_transport(
+    transport: Box<dyn Transport>,
+    ux: &mut dyn PairingUx,
+) -> Result<TrezorDevice, TrezorSignerError> {
     Ok(TrezorDevice {
-        session: ThpSession::connect()?,
+        session: ThpSession::connect(transport, ux)?,
     })
 }
 

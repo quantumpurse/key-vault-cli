@@ -898,7 +898,7 @@ fn handle_transfer(
     let message = ckb_node::compute_signing_message(&unsigned_tx, &input_cells, 0)
         .map_err(|e| format!("Failed to compute tx message: {}", e))?;
 
-    let signed_tx = if KeyVault::is_device_backed(wallet_id) {
+    let signed_tx = if KeyVault::is_hardware_wallet(wallet_id) {
         sign_transfer_with_trezor(&account, &qp_client, is_mainnet, unsigned_tx)?
     } else {
         let auth = get_auth_key(wallet_id)?;
@@ -933,8 +933,8 @@ fn sign_transfer_with_trezor(
     let sign_group: Vec<u32> = (0..unsigned_tx.inputs().len() as u32).collect();
 
     println!("Confirm the transaction on your Trezor...");
-    let mut device =
-        trezor_signer::open().map_err(|e| format!("Could not connect to Trezor: {}", e))?;
+    let mut device = trezor_signer::open(&mut trezor_signer::StdinPairing)
+        .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
     let signed = device
         .sign_tx(
             account.index,

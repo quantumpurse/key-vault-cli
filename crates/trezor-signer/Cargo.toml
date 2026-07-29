@@ -22,6 +22,17 @@ trezor-noise-rust-crypto = { git = "https://github.com/trezor/noise-rust", rev =
 getrandom = "0.3"
 log = "0.4"
 
+# USB transport to a physical device. `vendored` builds libusb from source so
+# no system package is needed (same choice as the vendored trezor-client).
+rusb = { version = "0.9", features = ["vendored"] }
+
+# CodeEntry pairing (CPace255) and on-disk credential persistence.
+sha2 = "0.10"
+num-bigint = "0.4"
+x25519-dalek = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
 # Same pinned protobuf runtime the vendored client uses (for MessageField).
 protobuf = "=3.7.2"
 hex = "0.4"

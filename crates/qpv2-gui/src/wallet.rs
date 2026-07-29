@@ -535,7 +535,7 @@ impl App {
     }
 
     pub(crate) fn create_singlesig_account(&mut self) {
-        if KeyVault::is_device_backed(self.wallet_id) {
+        if KeyVault::is_hardware_wallet(self.wallet_id) {
             self.create_device_account();
             return;
         }
@@ -599,7 +599,7 @@ impl App {
         let next_index = self.accounts.len() as u32;
         let is_mainnet = self.qp_client.is_mainnet();
 
-        let mut device = match trezor_signer::open() {
+        let mut device = match trezor_signer::open(&mut trezor_signer::PinentryPairing) {
             Ok(d) => d,
             Err(e) => {
                 let msg = format!("Could not connect to Trezor: {}", e);
@@ -831,7 +831,7 @@ impl App {
     pub(crate) fn create_wallet_with_trezor(&mut self, variant: SpxVariant, account_count: u32) {
         // Connect and import before allocating a wallet id, so a device
         // failure leaves no empty wallet behind.
-        let mut device = match trezor_signer::open() {
+        let mut device = match trezor_signer::open(&mut trezor_signer::PinentryPairing) {
             Ok(d) => d,
             Err(e) => {
                 let msg = format!("Could not connect to Trezor: {}", e);

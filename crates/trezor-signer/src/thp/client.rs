@@ -1,12 +1,12 @@
 //! THP session client — ported from `vendor/trezor-thp/examples/host-cli/client.rs`.
 //!
-//! A small UDP-backed driver over the `trezor-thp` channel state machine:
-//! `write`/`read` move framed packets with ACK handling, `call` does one
-//! request/response round-trip by raw message type, and `call_pb` layers
-//! protobuf encode/decode plus `ButtonRequest` auto-ack on top.
+//! A small transport-agnostic driver over the `trezor-thp` channel state
+//! machine: `write`/`read` move framed packets with ACK handling, `call` does
+//! one request/response round-trip by raw message type, and `call_pb` layers
+//! protobuf encode/decode plus `ButtonRequest` auto-ack on top. The packets
+//! ride whatever [`Transport`] the session was opened with (emulator UDP or
+//! physical USB).
 
-use std::io::ErrorKind;
-use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
 use protobuf::{Enum, Message};
@@ -14,6 +14,7 @@ use trezor_thp::channel::PacketInResult;
 use trezor_thp::error::TransportError;
 use trezor_thp::{channel::buffered::Buffered, channel::host::Mux, Backend, ChannelIO};
 
+use crate::thp::transport::{Transport, PACKET_LEN};
 use crate::TrezorSignerError;
 
 /// Turn a device-sent transport error into a helpful message.
@@ -27,34 +28,50 @@ fn transport_err(error: &TransportError) -> TrezorSignerError {
 }
 
 const ACK_TIMEOUT: Duration = Duration::from_secs(1);
-const READ_TIMEOUT: Duration = Duration::from_secs(60);
-const PACKET_LEN: usize = 64;
+/// Give up after this many consecutive silent [`ACK_TIMEOUT`]s while waiting
+/// for a transport-level ACK. The firmware's wire task ACKs on packet receipt
+/// — before any processing or user interaction — so a live peer answers
+/// within milliseconds; sustained silence means the peer is gone (dead
+/// emulator port, or a device wedged while still enumerated). Giving up is
+/// benign: nothing has been signed or broadcast, the user just reconnects.
+const MAX_SILENT_RETRANSMITS: u32 = 10;
+/// Default per-message read timeout. Generous because several protocol steps
+/// legitimately wait on the user (on-device confirmations, code entry).
+pub(crate) const READ_TIMEOUT: Duration = Duration::from_secs(60);
+/// Read timeout for the very first packet (channel allocation). A live device
+/// or emulator answers it within milliseconds and no user interaction is
+/// involved, so a short bound turns "nothing is listening" into a fast error
+/// instead of a full [`READ_TIMEOUT`] stall.
+pub(crate) const CONNECT_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
-const MESSAGE_TYPE_BUTTONREQUEST: u16 = 26;
-const MESSAGE_TYPE_BUTTONACK: u16 = 27;
+// Wire message-type ids, derived from the generated protobuf enum so they
+// cannot drift from the firmware's `messages.proto`.
+const MESSAGE_TYPE_FAILURE: u16 = trezor_client::protos::MessageType::MessageType_Failure as u16;
+const MESSAGE_TYPE_BUTTONREQUEST: u16 =
+    trezor_client::protos::MessageType::MessageType_ButtonRequest as u16;
+const MESSAGE_TYPE_BUTTONACK: u16 =
+    trezor_client::protos::MessageType::MessageType_ButtonAck as u16;
 
 pub(crate) struct Client<C> {
     pub channel: Buffered<C>,
     pub device_properties: Vec<u8>,
-    socket: UdpSocket,
-    emu_addr: SocketAddr,
+    transport: Box<dyn Transport>,
+    read_timeout: Duration,
 }
 
 impl<B> Client<Mux<B>>
 where
     B: Backend,
 {
-    pub fn open(emu_addr: SocketAddr, channel: Mux<B>) -> Result<Self, TrezorSignerError> {
+    pub fn open(transport: Box<dyn Transport>, channel: Mux<B>) -> Self {
         let mut channel = Buffered::new(channel);
         channel.set_packet_len(PACKET_LEN);
-        let socket = UdpSocket::bind("127.0.0.1:0")
-            .map_err(|e| TrezorSignerError::Protocol(format!("bind UDP socket: {e}")))?;
-        Ok(Client {
+        Client {
             channel,
             device_properties: Vec::new(),
-            socket,
-            emu_addr,
-        })
+            transport,
+            read_timeout: READ_TIMEOUT,
+        }
     }
 }
 
@@ -73,38 +90,22 @@ impl<C: ChannelIO> Client<C> {
         Ok(Client {
             channel,
             device_properties: self.device_properties,
-            socket: self.socket,
-            emu_addr: self.emu_addr,
+            transport: self.transport,
+            read_timeout: self.read_timeout,
         })
     }
 
+    /// Set the timeout for waiting on the device's next reply packet.
+    pub fn set_read_timeout(&mut self, timeout: Duration) {
+        self.read_timeout = timeout;
+    }
+
     fn send_to(&mut self, buf: &[u8]) -> Result<(), TrezorSignerError> {
-        log::trace!("> {}", hex::encode(buf));
-        self.socket
-            .send_to(buf, self.emu_addr)
-            .map_err(|e| TrezorSignerError::Protocol(format!("UDP send: {e}")))?;
-        Ok(())
+        self.transport.send(buf)
     }
 
     fn recv_from(&mut self, timeout: Duration) -> Result<Option<Vec<u8>>, TrezorSignerError> {
-        self.socket
-            .set_read_timeout(Some(timeout))
-            .map_err(|e| TrezorSignerError::Protocol(format!("set timeout: {e}")))?;
-        let mut sockbuf = vec![0u8; PACKET_LEN];
-        match self.socket.recv_from(sockbuf.as_mut_slice()) {
-            Ok((reply_len, src_addr)) => {
-                if src_addr != self.emu_addr {
-                    return Err(TrezorSignerError::Protocol(format!(
-                        "reply from unexpected address {src_addr}"
-                    )));
-                }
-                sockbuf.truncate(reply_len);
-                log::trace!("< {}", hex::encode(&sockbuf));
-                Ok(Some(sockbuf))
-            }
-            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(None),
-            Err(e) => Err(TrezorSignerError::Protocol(format!("UDP recv: {e}"))),
-        }
+        self.transport.recv(timeout)
     }
 
     fn write_ack(&mut self) -> Result<Vec<u8>, TrezorSignerError> {
@@ -136,6 +137,7 @@ impl<C: ChannelIO> Client<C> {
             .map_err(|_| TrezorSignerError::Protocol("THP message_in failed".into()))?;
 
         let mut acked = false;
+        let mut silent_retransmits = 0u32;
         while !acked {
             while self.channel.packet_out_ready() {
                 let packet = self.write_ack()?;
@@ -148,12 +150,22 @@ impl<C: ChannelIO> Client<C> {
             while !acked {
                 match self.recv_from(ACK_TIMEOUT)? {
                     None => {
+                        silent_retransmits += 1;
+                        if silent_retransmits >= MAX_SILENT_RETRANSMITS {
+                            return Err(TrezorSignerError::Client(
+                                "the Trezor stopped responding — reconnect and try again"
+                                    .to_string(),
+                            ));
+                        }
                         self.channel.message_retransmit().map_err(|_| {
                             TrezorSignerError::Protocol("THP retransmit failed".into())
                         })?;
                         break;
                     }
                     Some(packet) => {
+                        // Any packet proves the peer is alive; only count
+                        // uninterrupted silence.
+                        silent_retransmits = 0;
                         acked = self.read_ack(&packet)?;
                     }
                 }
@@ -168,9 +180,10 @@ impl<C: ChannelIO> Client<C> {
         while result.is_none() {
             let mut done = false;
             while !done {
-                let Some(packet) = self.recv_from(READ_TIMEOUT)? else {
+                let Some(packet) = self.recv_from(self.read_timeout)? else {
                     return Err(TrezorSignerError::Protocol(format!(
-                        "timed out waiting for response after {READ_TIMEOUT:?}"
+                        "timed out waiting for response after {:?}",
+                        self.read_timeout
                     )));
                 };
                 let pir = self
@@ -254,6 +267,15 @@ impl<C: ChannelIO> Client<C> {
             .value()
             .try_into()
             .map_err(|_| TrezorSignerError::Protocol("expected type out of range".to_string()))?;
+        if reply_type == MESSAGE_TYPE_FAILURE && reply_type != expected {
+            let msg = crate::thp::pb::messages_common::Failure::parse_from_bytes(&reply)
+                .ok()
+                .map(|f| f.message().to_string())
+                .unwrap_or_default();
+            return Err(TrezorSignerError::Client(format!(
+                "device rejected the request: {msg}"
+            )));
+        }
         if reply_type != expected {
             return Err(TrezorSignerError::Protocol(format!(
                 "expected reply type {expected}, got {reply_type}"

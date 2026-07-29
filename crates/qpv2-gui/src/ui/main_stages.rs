@@ -260,10 +260,12 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(12.0);
 
-                if matches!(
-                    self.auth_method,
-                    Some(AuthMethod::Keychain) | Some(AuthMethod::Fido2 { .. })
-                ) {
+                // Password is the only method without lock/unlock, deliberately
+                // (see the startup gate in `main.rs`): its passwords are 20+
+                // characters, too much friction to re-enter just to look at
+                // balances. Every other method locks — stated as an exclusion,
+                // like the startup gate, so a new method gets a lock by default.
+                if !matches!(self.auth_method, Some(AuthMethod::Password)) {
                     let lock = ghost_button(&self.colors, "LOCK", egui::vec2(56.0, 22.0));
                     if ui.add(lock).clicked() {
                         self.lock_wallet();
@@ -811,7 +813,26 @@ impl App {
                                     self.unlock_with_keychain();
                                 }
                             }
-                            _ => {}
+                            Some(AuthMethod::Trezor { .. }) => {
+                                let btn = accent_button(
+                                    &self.colors,
+                                    "Open // Watch-only",
+                                    egui::vec2(full_w, 42.0),
+                                );
+                                if ui.add(btn).clicked() {
+                                    let id = self.wallet_id;
+                                    let name = self.wallet_name.clone();
+                                    self.switch_wallet(id, &name);
+                                }
+                            }
+                            // Unreachable: Password skips the startup gate and
+                            // has no LOCK button, and `list_wallets` drops any
+                            // wallet whose info cannot be read, so `auth_method`
+                            // is `Some` for anything that gets this far. Listed
+                            // explicitly rather than `_` so that adding an auth
+                            // method fails to compile here instead of silently
+                            // rendering a screen with nothing to click.
+                            Some(AuthMethod::Password) | None => {}
                         }
                     });
                 },
