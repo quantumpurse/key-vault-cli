@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 qpv2-core = { path = "../qpv2-core" }
-trezor-signer = { path = "../trezor-signer" }
+trezor-connect = { path = "../trezor-connect" }
 keychain = { path = "../keychain", features = ["fido2"] }
 ckb-node = { path = "../ckb-node" }
 clap = { version = "4.5.60", features = ["derive"] }

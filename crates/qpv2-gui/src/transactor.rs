@@ -630,7 +630,7 @@ impl App {
                     )
                     .map_err(|e| format!("Failed to fetch Trezor signing context: {}", e))?;
 
-                let mut device = trezor_signer::open(&mut trezor_signer::PinentryPairing)
+                let mut device = trezor_connect::open(&mut trezor_connect::PinentryPairing)
                     .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
 
                 let signed = device

@@ -5133,7 +5133,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "trezor-signer",
+ "trezor-connect",
 ]
 
 [[package]]
@@ -5184,7 +5184,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "trezor-signer",
+ "trezor-connect",
  "winresource",
 ]
 
@@ -6718,28 +6718,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "trezor-noise-protocol"
-version = "0.2.0"
-source = "git+https://github.com/trezor/noise-rust?rev=1bb08dfdfc11160b760b8d28c09677ed72fb1fff#1bb08dfdfc11160b760b8d28c09677ed72fb1fff"
-dependencies = [
- "heapless",
-]
-
-[[package]]
-name = "trezor-noise-rust-crypto"
-version = "0.6.2"
-source = "git+https://github.com/trezor/noise-rust?rev=1bb08dfdfc11160b760b8d28c09677ed72fb1fff#1bb08dfdfc11160b760b8d28c09677ed72fb1fff"
-dependencies = [
- "aes-gcm",
- "sha2",
- "trezor-noise-protocol",
- "x25519-dalek",
- "zeroize",
-]
-
-[[package]]
-name = "trezor-signer"
-version = "2.0.0-rc.5"
+name = "trezor-connect"
+version = "0.1.0"
 dependencies = [
  "ckb-fips205-utils",
  "ckb-node",
@@ -6761,6 +6741,26 @@ dependencies = [
  "trezor-noise-rust-crypto",
  "trezor-thp",
  "x25519-dalek",
+]
+
+[[package]]
+name = "trezor-noise-protocol"
+version = "0.2.0"
+source = "git+https://github.com/trezor/noise-rust?rev=1bb08dfdfc11160b760b8d28c09677ed72fb1fff#1bb08dfdfc11160b760b8d28c09677ed72fb1fff"
+dependencies = [
+ "heapless",
+]
+
+[[package]]
+name = "trezor-noise-rust-crypto"
+version = "0.6.2"
+source = "git+https://github.com/trezor/noise-rust?rev=1bb08dfdfc11160b760b8d28c09677ed72fb1fff#1bb08dfdfc11160b760b8d28c09677ed72fb1fff"
+dependencies = [
+ "aes-gcm",
+ "sha2",
+ "trezor-noise-protocol",
+ "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]

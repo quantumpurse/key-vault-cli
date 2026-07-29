@@ -202,7 +202,7 @@ pub fn header_deps_of(tx: &TransactionView) -> Vec<Vec<u8>> {
 /// Convert a full CKB header into the shape streamed to the device.
 pub fn block_header(header: &HeaderView) -> protos::CKBBlockHeader {
     let mut result = protos::CKBBlockHeader::new();
-    result.set_version(header.version().into());
+    result.set_version(header.version());
     result.set_compact_target(header.compact_target());
     result.set_timestamp(header.timestamp());
     result.set_number(header.number());

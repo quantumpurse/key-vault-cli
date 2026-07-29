@@ -933,7 +933,7 @@ fn sign_transfer_with_trezor(
     let sign_group: Vec<u32> = (0..unsigned_tx.inputs().len() as u32).collect();
 
     println!("Confirm the transaction on your Trezor...");
-    let mut device = trezor_signer::open(&mut trezor_signer::StdinPairing)
+    let mut device = trezor_connect::open(&mut trezor_connect::StdinPairing)
         .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
     let signed = device
         .sign_tx(

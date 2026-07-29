@@ -603,7 +603,7 @@ impl App {
         let next_index = self.accounts.len() as u32;
         let is_mainnet = self.qp_client.is_mainnet();
 
-        let mut device = match trezor_signer::open(&mut trezor_signer::PinentryPairing) {
+        let mut device = match trezor_connect::open(&mut trezor_connect::PinentryPairing) {
             Ok(d) => d,
             Err(e) => {
                 let msg = format!("Could not connect to Trezor: {}", e);
@@ -626,7 +626,7 @@ impl App {
         let config = qpv2_core::types::MultisigConfig::single_sig(
             variant,
             addr.pubkey,
-            trezor_signer::TREZOR_CONVENTION,
+            trezor_connect::TREZOR_CONVENTION,
         );
         let account = qpv2_core::types::SphincsPlusAccount {
             index: next_index,
@@ -849,7 +849,7 @@ impl App {
 
         std::thread::spawn(move || {
             let result = (|| -> TrezorImportUpdate {
-                let mut device = trezor_signer::open(&mut trezor_signer::PinentryPairing)
+                let mut device = trezor_connect::open(&mut trezor_connect::PinentryPairing)
                     .map_err(|e| format!("Could not connect to Trezor: {}", e))?;
                 let model = device.model();
 
@@ -863,7 +863,7 @@ impl App {
                     let config = qpv2_core::types::MultisigConfig::single_sig(
                         variant,
                         addr.pubkey,
-                        trezor_signer::TREZOR_CONVENTION,
+                        trezor_connect::TREZOR_CONVENTION,
                     );
                     accounts.push(qpv2_core::types::SphincsPlusAccount {
                         index: i,

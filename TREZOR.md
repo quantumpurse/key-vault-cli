@@ -61,7 +61,7 @@ confirmation on the device.
 A quick connectivity check without touching any wallet:
 
 ```sh
-cargo run -p trezor-signer --example usb_probe
+cargo run -p trezor-connect --example usb_probe
 ```
 
 It lists visible devices, opens a THP session (running pairing if needed), and
@@ -97,7 +97,7 @@ via the firmware's `trezorctl` (`python/src/trezorlib`).
 With the emulator running, the integration tests prove the pipe end-to-end. They are `#[ignore]`d by default and auto-confirm on-device prompts over the debug link, so they need no manual clicking. They are seed-agnostic (they verify parity of whatever key the emulator holds) and need no on-chain funds:
 
 ```sh
-cargo test -p trezor-signer --test emulator -- --ignored --nocapture
+cargo test -p trezor-connect --test emulator -- --ignored --nocapture
 ```
 
 - `get_address_parity` — the device's lock_args match the wallet's own derivation (proves transport + protobuf + key derivation).
@@ -112,7 +112,7 @@ cargo test -p trezor-signer --test emulator -- --ignored --nocapture
 
 ## Implementation map
 
-- `crates/trezor-signer` — device discovery, `get_address`, and the streaming `sign_tx` state machine (a Rust port of the firmware's `ckb.py` host loop). Inside it, `thp/transport.rs` holds the USB/UDP packet transports, `thp/pairing.rs` the CodeEntry flow and credential store, and `thp/cpace.rs` the CPace255 PAKE (ported from trezorlib, pinned against its test vectors).
+- `crates/trezor-connect` — device discovery, `get_address`, and the streaming `sign_tx` state machine (a Rust port of the firmware's `ckb.py` host loop). Inside it, `thp/transport.rs` holds the USB/UDP packet transports, `thp/pairing.rs` the CodeEntry flow and credential store, and `thp/cpace.rs` the CPace255 PAKE (ported from trezorlib, pinned against its test vectors).
 - `vendor/trezor-thp` — the vendored THP channel state machine (framing, Noise handshake, ACK/retransmit); the signer drives it through `thp/client.rs`.
 - `vendor/trezor-client` — the vendored Trezor host client (Protocol v1 + the generated CKB protobuf bindings). Protobuf changes are made and generated in the firmware repo (`rust/trezor-client/scripts/build_protos` then `build_messages`), then copied here as a set — `protos/generated/messages_ckb.rs`, `protos/generated/messages.rs`, and `messages/generated.rs` — since a message missing from the latter two has no wire id and cannot be sent through the typed `call()`.
 - `ckb-node::fetch_hardware_signing_context` — supplies full previous transactions, their committed block hashes, and DAO header dependencies for the device's trustless capacity and compensation checks.

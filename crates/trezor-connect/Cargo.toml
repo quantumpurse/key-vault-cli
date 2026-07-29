@@ -1,9 +1,9 @@
 [package]
-name = "trezor-signer"
-version = "2.0.0-rc.5"
+name = "trezor-connect"
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Trezor Safe hardware signer for QuantumPurse: streams a CKB transaction to the device and returns a SPHINCS+ witness lock."
+description = "Trezor Safe hardware connector for QuantumPurse: streams a CKB transaction to the device and returns a SPHINCS+ witness lock."
 
 [dependencies]
 # Vendored Trezor host client (Protocol v1 + UDP/USB transports + generated CKB

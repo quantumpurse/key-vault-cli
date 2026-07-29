@@ -6,9 +6,9 @@ members = [
 	"crates/qpv2-core",
 	"crates/qpv2-gui",
 	"crates/ckb-node",
-	"crates/trezor-signer",
+	"crates/trezor-connect",
 ]
-# Vendored path dependencies of trezor-signer; kept out of the workspace so our
+# Vendored path dependencies of trezor-connect; kept out of the workspace so our
 # lint/build-all commands do not touch third-party code.
 exclude = [
 	"vendor/trezor-client",
