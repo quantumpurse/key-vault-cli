@@ -896,13 +896,18 @@ impl KeyVault {
     /// this writes no `seed.json`: the private key lives on the hardware device.
     /// The imported `accounts` (public key + lock args exported from the device)
     /// must be ordered by device account index starting at 0, so each stored
-    /// account's position equals its derivation index. Device accounts use the
-    /// V1 single-sig convention, matching the firmware's lock script.
+    /// account's position equals its derivation index.
+    ///
+    /// `convention` must be the one the accounts' configs were built with —
+    /// callers pass the device crate's `TREZOR_CONVENTION` rather than naming
+    /// a variant here, so the wallet record and the accounts can never drift
+    /// apart the way they did when this was hard-coded.
     pub fn create_device_wallet(
         wallet_id: u32,
         name: &str,
         variant: SpxVariant,
         model: &str,
+        convention: SingleSigConvention,
         accounts: Vec<SphincsPlusAccount>,
     ) -> Result<(), String> {
         db::wallets::validate_wallet_name(name, None).map_err(|e| e.to_string())?;
@@ -919,7 +924,7 @@ impl KeyVault {
             auth_method: AuthMethod::Trezor {
                 model: model.to_string(),
             },
-            single_sig_convention: SingleSigConvention::V1,
+            single_sig_convention: convention,
         };
         db::set_wallet_info(wallet_id, wallet_info).map_err(|e| e.to_string())?;
 

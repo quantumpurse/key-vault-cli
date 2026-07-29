@@ -896,9 +896,14 @@ impl App {
             }
         };
 
-        if let Err(e) =
-            KeyVault::create_device_wallet(wallet_id, &wallet_name, variant, &model, accounts)
-        {
+        if let Err(e) = KeyVault::create_device_wallet(
+            wallet_id,
+            &wallet_name,
+            variant,
+            &model,
+            trezor_connect::TREZOR_CONVENTION,
+            accounts,
+        ) {
             let msg = format!("Failed to create Trezor wallet: {}", e);
             tracing::error!("{}", msg);
             self.status = Status::Error(msg);
