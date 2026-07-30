@@ -1,62 +1,16 @@
 # QPV2
 
-Rust Quantum Purse. Secure and Performant. There are 2 UI options: CLI and GUI (egui). Design by human, developed in collaboration with Claude Opus (4.5 / 4.6).
+QPV2 is a pure Rust Quantum Purse built on top of [Quantum Purse V1's core](https://github.com/quantumpurse/key-vault-wasm). QPV2 is Optimized for security and performance. Design by human, developed in collaboration with Claude Opus and Fable.
 
 ### Crates
 
-- **`qpv2-core`** — Core library. Seed generation, AES-256-GCM encryption, HKDF-SHA256 key derivation, Scrypt password hashing, SPHINCS+ signing across all 12 parameter sets, and file-based JSON storage with multi-wallet support.
-- **`qpv2-cli`** — CLI binary built with `clap`. Supports all authentication methods (password, keychain, FIDO2). Multi-wallet management, account derivation, raw signing, and CKB transaction signing.
-- **`qpv2-gui`** — GUI binary built with `egui`/`eframe`. Supports all authentication methods. Provides node management, CKB transfers, NervosDAO operations.
-- **`keychain`** — Multi-platform credential storage. Touch ID via Data Protection Keychain (macOS), Windows Hello + TPM via Microsoft Passport KSP (Windows), TPM 2.0 seal/unseal with PIN (Linux), and FIDO2 hmac-secret extension for hardware security keys.
-- **`node-manager`** — CKB node lifecycle and RPC abstraction.
-- **`ckb-fips205-utils`** — CKB transaction hashing utilities for SPHINCS+. Computes `CKB_TX_MESSAGE_ALL` signing message from mock transactions. Feature-gated for verifying, signing, message extraction, and serde support.
-
-### Custom BIP39
-BIP39 is chosen as the mnemonic backup format due to its user-friendliness and quantum resistance.
-
-SPHINCS+ offers 12 parameter sets, grouped by three security parameters: 128-bit, 192-bit, and 256-bit. These require seeds of 48 bytes, 72 bytes, and 96 bytes respectively used across key generation and signing. As BIP39 supports max 32 bytes so this library introduces a custom(combined) BIP39 mnemonic backup format for each security parameter of SPHINCS+ as below:
-
-|    SPHINCS+ security parameter      |  BIP39 entropy level  |   Word count    |
-|-------------------------------------|-----------------------|-----------------|
-|    128 bit ~ 48 bytes ~ 3*16 bytes  |       3*16 bytes      | 3*12 = 36 words |
-|    192 bit ~ 72 bytes ~ 3*24 bytes  |       3*24 bytes      | 3*18 = 54 words |
-|    256 bit ~ 96 bytes ~ 3*32 bytes  |       3*32 bytes      | 3*24 = 72 words |
-
-###### For example:
-- SHA2-256s will require users to back up 72 words of mnemonic phrase.
-- SHAKE-192s will require users to back up 54 words of mnemonic phrase.
-- SHA2-128f will require users to back up 36 words of mnemonic phrase.
-
-### Key Derivation Function
-
-From the single master seed, quantum-purse-v2 can derive many child keys using Key Derivation Function(KDF). Pure Hash-based KDF is the top choice for this project. Although using [BIP32](https://en.bitcoin.it/wiki/BIP_0032) carefully (with only hardened key derivation and never generate ECDSA public keys) can satisfy however the benefits of the tricky usage at this point(2025) is unclear. Thus, a fresh start with HKDF seems better because it's simpler - meaning the implementation will be easier to audit.
-
-###### Key Tree:
-```
-master_seed
-   ├─ index 0 → sphincs+ key 1
-   ├─ index 1 → sphincs+ key 2
-   ├─ index 2 → sphincs+ key 3
-   └─ ...
-```
-
-###### Derivation Flow:
-```
-master_seed
-     │
-     ▼
-(seed_part1, seed_part2, seed_part3)
-     │
-     ├─ HKDF("ckb/quantum-purse/sphincs-plus/", index)
-     │
-     ▼
-(sk_seed, sk_prf, pk_seed)
-     │
-     ├─ sphincs+_key_gen()
-     │
-     ▼
-(sphincs+ public_key, sphincs+ private_key)
-```
+- **`qpv2-core`** — SPHINCS+ key management and signing.
+- **`qpv2-cli`** — is QPV2 but with Command Line Interface.
+- **`qpv2-gui`** — is QPV2 but is a GUI (egui).
+- **`keychain`** — is multi-platform hardware backed key keeper and manager (Apple Keychain, TMP2.0 on Windows and Linus).
+- **`ckb-node`** — CKB node abstraction and wallet-domain helpers.
+- **`trezor-connect`** — Trezor Safe hardware connector.
+- **`ckb-fips205-utils`** — copied from the [quantum-resistant-lock-script project](https://github.com/nervosnetwork/quantum-resistant-lock-script) and primarily used for `CKB_TX_MESSAGE_ALL`.
 
 ### Build & Run
 
@@ -66,8 +20,13 @@ All platforms require git submodules before building:
 ```shell
 git clone https://github.com/quantumpurse/quantum-purse-v2.git
 cd quantum-purse-v2
-git submodule update --init --recursive
+git submodule update --init
 ```
+
+Plain `--init` is deliberate: no nested submodule is needed for the build.
+`--recursive` would pull `vendor/ckb`'s two (test-only repos we never build)
+and `vendor/trezor-firmware`'s fourteen — micropython, the STM32 HALs — for
+nothing.
 
 ##### macOS
 
@@ -135,49 +94,36 @@ powershell -ExecutionPolicy Bypass -File .\crates\qpv2-gui\scripts\bundle-window
 cargo test --workspace
 ```
 
-### Use CLI
+### Trezor emulator
+Emulator MUST be used for testing purposes only. If you wish to test this wallet with Trezor emulator, here's how to start the emulator (tested on macos). From the repo root (`vendor/trezor-firmware`):
 
-The CLI supports multiple wallets. The global `--wallet <name>` option selects which wallet to operate on. For `init` and `mnemonic import`, the name is optional — a random name (e.g. "brave-curie") is auto-generated if omitted. For other commands, it auto-selects if only one wallet exists; if multiple wallets exist, it must be specified. Wallets can be renamed later.
-
-```shell
-# Show help
-qpv2-cli --help
+###### 1. Install Nix (one-time)
+```
+sh <(curl -L https://nixos.org/nix/install)
+```
+###### 2. Init submodules (one-time, or after pulling new changes)
+```
+git submodule update --init --recursive --force
+```
+###### 3. Enter Nix shell (sets up compilers and system deps)
+```
+nix-shell
+```
+###### 4. Install Python dependencies
+```
+uv sync
+source .venv/bin/activate
+```
+###### 5. Build and run
+```
+cd core
+make build_unix
+make emu
 ```
 
-Commands that require authentication (export, new account, sign, etc.) auto-detect the wallet's auth method. Password wallets prompt for a password; keychain wallets use the platform's native credential store (Touch ID on macOS, Windows Hello on Windows, TPM on Linux).
+### Secrets Input
 
-### Launch Scripts (macOS only)
-```shell
-# Launch the dev GUI
-./launch.sh gui
-
-# Launch the prod GUI
-./launch.sh gui --release
-```
-
-On Linux and Windows, run the binary directly from the bundle output directory (see Build & Run above).
-
-### Node Backends
-
-The GUI lets the user pick how the wallet talks to the CKB chain. Each
-backend is selectable from the Node Manager tab and persists across
-sessions.
-
-| Backend       | What it is                                         | When to use |
-|---------------|----------------------------------------------------|-------------|
-| **Public RPC**| Remote JSON-RPC endpoint (default).                | Quick start, no local resources. |
-| **Light Client** | Local `ckb-light-client` child process; header-only sync, per-script cell index. | Privacy-preserving; modest disk + bandwidth. |
-| **Full Node** | Local `ckb` child process; full chain verification, full indexer. | Maximum sovereignty; ~100 GB disk and multi-day sync. |
-
-### Password Input
-
-Password entry in QPV2 happens **outside the wallet's own process** —
-through a dedicated, OS-native dialog spawned as a child process. The
-wallet binary itself never sees a keystroke during typing; it only
-reads the final password from a kernel pipe at the moment the user
-submits, copies it once into a zeroize-on-drop `SecureString`, and
-drops it the moment the vault op (sign / decrypt / new account)
-returns.
+Password/mnemonic entry in QPV2 happens **outside the wallet's own process** - through a dedicated, OS-native dialog spawned as a child process called [Pinentry](https://www.gnupg.org/related_software/pinentry/index.html).
 
 ### Credential Store Authentication
 
@@ -186,7 +132,7 @@ When a wallet is created with `--keychain` (CLI) or the keychain button
 platform's credential store. The encrypted master seed lives on disk;
 the credential store only holds the encryption key.
 
-#### macOS — Data Protection Keychain + Secure Enclave
+##### 1. macOS — Data Protection Keychain + Secure Enclave
 
 Items are stored in the Data Protection Keychain with
 `BiometryCurrentSet` access control. The encryption key (K1) never
@@ -194,7 +140,7 @@ leaves the Secure Enclave in plaintext except at the moment it is
 returned to the app. The full key hierarchy below is hardware-enforced
 — the main CPU never sees any intermediate key.
 
-##### Key hierarchy
+###### Key hierarchy
 
 ```
 K1 (the 32-byte AES encryption key your app stores)
@@ -231,7 +177,7 @@ K1 (the 32-byte AES encryption key your app stores)
   is stored on disk; the plaintext per-item key exists only inside the
   Enclave during encrypt/decrypt operations.
 
-##### Retrieval flow
+###### Retrieval flow
 
 When `retrieve_key()` is called:
 
@@ -246,7 +192,7 @@ When `retrieve_key()` is called:
 6. K1 is returned to the app. The biometric key is discarded from
    working memory.
 
-##### What Apple does not publicly document
+###### What Apple does not publicly document
 
 The exact nature of the biometric subsystem key (random at enrollment
 vs. derived from template hashes), the precise mechanism that binds it
@@ -255,7 +201,7 @@ or per-class are not disclosed. The security *properties* above are
 documented in the [Apple Platform Security Guide](https://support.apple.com/guide/security/welcome/web);
 the internal cryptographic construction is not.
 
-#### Windows — TPM + Windows Hello (Microsoft Passport KSP)
+##### 2. Windows — TPM + Windows Hello (Microsoft Passport KSP)
 
 An RSA-2048 key pair is created inside the TPM via the Microsoft
 Passport Key Storage Provider. The 32-byte vault encryption key is
@@ -268,7 +214,7 @@ the TPM.
 The previous DPAPI Credential Manager implementation is preserved in
 `sw_backed/windows_dpapi.rs` for reference.
 
-#### Linux — TPM seal via `tss-esapi`
+##### 3. Linux — TPM seal via `tss-esapi`
 
 The 32-byte vault encryption key is sealed under the TPM's Storage
 Root Key (SRK) using `TPM2_Create`. A user-chosen PIN is set as the
@@ -291,7 +237,7 @@ or `tpm2-tss` (Arch) at build time. Device access via `/dev/tpmrm0`
 The previous Secret Service D-Bus implementation is preserved in
 `sw_backed/linux_secret_service.rs` for reference.
 
-#### Platform comparison
+##### 4. Platform comparison
 
 | Scenario | Plain file | DPAPI / Secret Service | Apple Keychain + Touch ID | TPM + Windows Hello | TPM seal | FIDO2 Hardware Key |
 |---|---|---|---|---|---|---|
@@ -305,7 +251,7 @@ The DPAPI (Windows) and Secret Service (Linux) implementations are
 preserved for reference. Both are replaced by hardware-backed options:
 TPM + Windows Hello on Windows and TPM seal on Linux.
 
-#### Hardware-backed authentication architecture
+##### 5. Hardware-backed authentication architecture
 
 All hardware-backed methods share the same core pattern: an opaque
 hardware operation gated by authentication produces or releases a key.
