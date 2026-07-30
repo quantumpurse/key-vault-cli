@@ -6,9 +6,10 @@ license = "MIT"
 description = "Trezor Safe hardware connector for QuantumPurse: streams a CKB transaction to the device and returns a SPHINCS+ witness lock."
 
 [dependencies]
-# Vendored Trezor host client (Protocol v1 + UDP/USB transports + generated CKB
-# protobuf bindings). Only the `ckb` message bindings are pulled in.
-trezor-client = { path = "../../vendor/trezor-client", default-features = false, features = ["ckb"] }
+# Trezor host client (Protocol v1 + UDP/USB transports + generated CKB protobuf
+# bindings), from the firmware submodule so the protocol code and the firmware
+# that speaks it are pinned to one commit. Only the `ckb` bindings are pulled in.
+trezor-client = { path = "../../vendor/trezor-firmware/rust/trezor-client", default-features = false, features = ["ckb"] }
 
 qpv2-core = { path = "../qpv2-core" }
 ckb-fips205-utils = { path = "../ckb-fips205-utils", features = ["signing"] }
@@ -17,13 +18,14 @@ ckb-types = "=1.0.1"
 # Trezor Host Protocol (THP v2) — the encrypted session the Safe 7 firmware
 # requires. Provides the channel/handshake/framing; the Noise crypto backend and
 # getrandom supply the primitives.
-trezor-thp = { path = "../../vendor/trezor-thp", features = ["use_std"] }
+trezor-thp = { path = "../../vendor/trezor-firmware/rust/trezor-thp", features = ["use_std"] }
 trezor-noise-rust-crypto = { git = "https://github.com/trezor/noise-rust", rev = "1bb08dfdfc11160b760b8d28c09677ed72fb1fff", default-features = false, features = ["use-x25519", "use-aes-256-gcm", "use-sha2"] }
 getrandom = "0.3"
 log = "0.4"
 
 # USB transport to a physical device. `vendored` builds libusb from source so
-# no system package is needed (same choice as the vendored trezor-client).
+# no system package is needed. Cargo unifies this with trezor-client's plain
+# `rusb` dependency, so the transitive copy is built from source too.
 rusb = { version = "0.9", features = ["vendored"] }
 
 # CodeEntry pairing (CPace255) and on-disk credential persistence.

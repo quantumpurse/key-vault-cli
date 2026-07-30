@@ -1,4 +1,5 @@
-//! THP session client — ported from `vendor/trezor-thp/examples/host-cli/client.rs`.
+//! THP session client — ported from
+//! `vendor/trezor-firmware/rust/trezor-thp/examples/host-cli/client.rs`.
 //!
 //! A small transport-agnostic driver over the `trezor-thp` channel state
 //! machine: `write`/`read` move framed packets with ACK handling, `call` does

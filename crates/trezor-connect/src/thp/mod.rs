@@ -3,8 +3,9 @@
 //! The Safe 7 firmware speaks THP only (it rejects Protocol v1 with
 //! `Failure_InvalidProtocol` at the handshake), so device access goes through an
 //! encrypted Noise session rather than the legacy `trezor-client`. This module
-//! ports the reference host loop from `vendor/trezor-thp/examples/host-cli`
-//! (channel allocation → Noise handshake → skip-pairing → encrypted `call`) and
+//! ports the reference host loop from
+//! `vendor/trezor-firmware/rust/trezor-thp/examples/host-cli`
+//! (channel allocation → Noise handshake → pairing → encrypted `call`) and
 //! sends our existing CKB protobuf messages as raw bytes over it. The session
 //! runs over either packet transport in [`transport`]: UDP to the emulator or
 //! USB to a physical device.
@@ -58,7 +59,7 @@ impl ThpSession {
     /// Run the full THP bring-up over an established packet transport: channel
     /// allocation, Noise handshake (presenting any stored pairing credential),
     /// and — unless the credential already got us `Paired` — the pairing phase
-    /// (skip-pairing on dev firmware, CodeEntry on production firmware).
+    /// (CodeEntry, the device's preferred method on every firmware build).
     pub(crate) fn connect(
         transport: Box<dyn Transport>,
         ux: &mut dyn PairingUx,

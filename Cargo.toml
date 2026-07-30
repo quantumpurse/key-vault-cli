@@ -8,10 +8,9 @@ members = [
 	"crates/ckb-node",
 	"crates/trezor-connect",
 ]
-# Vendored path dependencies of trezor-connect; kept out of the workspace so our
-# lint/build-all commands do not touch third-party code.
+# Path dependencies of trezor-connect live in the firmware submodule; kept out of
+# the workspace so our lint/build-all commands do not touch third-party code.
 exclude = [
-	"vendor/trezor-client",
-	"vendor/trezor-thp",
+	"vendor/trezor-firmware",
 ]
 resolver = "2"
