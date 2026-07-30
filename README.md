@@ -23,12 +23,7 @@ cd quantum-purse-v2
 git submodule update --init
 ```
 
-Plain `--init` is deliberate: no nested submodule is needed for the build.
-`--recursive` would pull `vendor/ckb`'s two (test-only repos we never build)
-and `vendor/trezor-firmware`'s fourteen — micropython, the STM32 HALs — for
-nothing.
-
-##### macOS
+#### macOS
 
 Build toolchain: `brew install automake gettext && xcode-select --install`
 
@@ -41,7 +36,7 @@ cargo build -p qpv2-cli --release
 ./launch.sh <cli|gui> [--release]
 ```
 
-##### Linux
+#### Linux
 
 Install system dependencies first — the build will fail without them:
 ```shell
@@ -69,7 +64,7 @@ Run:
 ./target/release/qpv2-gui-linux-x86_64/qpv2-gui         # release
 ```
 
-##### Windows
+#### Windows
 
 Build toolchain:
 - Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload (provides the MSVC linker). 
