@@ -16,3 +16,6 @@
 	path = vendor/libassuan
 	url = https://github.com/gpg/libassuan.git
 	ignore = dirty
+[submodule "vendor/trezor-firmware"]
+	path = vendor/trezor-firmware
+	url = https://github.com/quantumpurse/trezor-firmware.git
