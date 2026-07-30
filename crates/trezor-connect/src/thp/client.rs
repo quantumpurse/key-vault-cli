@@ -276,7 +276,7 @@ impl<C: ChannelIO> Client<C> {
             .try_into()
             .map_err(|_| TrezorSignerError::Protocol("expected type out of range".to_string()))?;
         if reply_type == MESSAGE_TYPE_FAILURE && reply_type != expected {
-            let msg = crate::thp::pb::messages_common::Failure::parse_from_bytes(&reply)
+            let msg = trezor_client::protos::Failure::parse_from_bytes(&reply)
                 .ok()
                 .map(|f| f.message().to_string())
                 .unwrap_or_default();

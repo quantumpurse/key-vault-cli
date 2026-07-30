@@ -22,15 +22,15 @@ use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
 use crate::thp::client::Client;
 use crate::thp::cpace;
-use crate::thp::pb::messages_thp::{
+use crate::thp::RustCrypto;
+use crate::TrezorSignerError;
+use trezor_client::protos::{
     ThpCodeEntryChallenge, ThpCodeEntryCommitment, ThpCodeEntryCpaceHostTag,
     ThpCodeEntryCpaceTrezor, ThpCodeEntrySecret, ThpCredentialRequest, ThpCredentialResponse,
     ThpDeviceProperties, ThpEndRequest, ThpEndResponse, ThpHandshakeCompletionReqNoisePayload,
     ThpMessageType, ThpPairingMethod, ThpPairingRequest, ThpPairingRequestApproved,
     ThpSelectMethod,
 };
-use crate::thp::RustCrypto;
-use crate::TrezorSignerError;
 
 /// The device rejects credentials wrapped in a handshake payload larger than
 /// this (`trezor_thp::channel::MAX_CREDENTIAL_LEN`).

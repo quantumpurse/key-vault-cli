@@ -9,9 +9,6 @@
 //! runs over either packet transport in [`transport`]: UDP to the emulator or
 //! USB to a physical device.
 
-#[allow(clippy::all)]
-mod pb;
-
 mod client;
 mod cpace;
 pub(crate) mod pairing;
@@ -24,7 +21,7 @@ use trezor_thp::Backend;
 
 use client::Client;
 use pairing::{HostIdentity, PairingUx};
-use pb::messages_thp::ThpDeviceProperties;
+use trezor_client::protos::ThpDeviceProperties;
 
 use qpv2_core::types::{MultisigConfig, SpxVariant};
 
@@ -152,7 +149,7 @@ impl ThpSession {
     ) -> Result<(u16, Vec<u8>), TrezorSignerError> {
         let (reply_type, reply) = self.client.call_raw(message_type, message)?;
         if reply_type == MSG_FAILURE {
-            let msg = pb::messages_common::Failure::parse_from_bytes(&reply)
+            let msg = trezor_client::protos::Failure::parse_from_bytes(&reply)
                 .ok()
                 .map(|f| f.message().to_string())
                 .unwrap_or_default();
