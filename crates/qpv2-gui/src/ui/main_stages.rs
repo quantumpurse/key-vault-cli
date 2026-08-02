@@ -783,12 +783,17 @@ impl App {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let t = ui.input(|i| i.time) as f32;
+                // Amber, and pulsing at the urgent rate: everything else on
+                // this screen is cyan chrome or muted body text, so the one
+                // line that is waiting on the user has the panel's only warm
+                // colour. Accent cyan would have read as decoration.
+                let attention = self.colors.warn;
                 let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                breathing_dot(ui.painter(), dot.center(), self.colors.accent, t, false);
+                breathing_dot(ui.painter(), dot.center(), attention, t, true);
                 ui.label(
                     egui::RichText::new("Follow the instructions on your Trezor's screen.")
                         .font(label_font(10.0))
-                        .color(self.colors.text_muted),
+                        .color(attention),
                 );
             });
         }
