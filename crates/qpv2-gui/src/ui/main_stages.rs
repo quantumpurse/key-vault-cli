@@ -80,6 +80,7 @@ impl App {
                 self.draw_unlocked_bg(ui);
 
                 egui::ScrollArea::vertical()
+                    .scroll_source(egui::containers::scroll_area::ScrollSource::ALL)
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         ui.add_space(18.0);
