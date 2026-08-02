@@ -7,6 +7,12 @@ use crate::tx_history::TxHistoryStore;
 use crate::types::{CurrentWallet, Screen, Status, TransactionStatus, TrezorImportUpdate};
 use crate::App;
 
+/// Cadence for the device-link probe. Short enough that unplugging or
+/// closing Trezor Suite shows up while the user is still looking at the
+/// screen; the probe itself is a USB enumeration plus one claim/release, so
+/// the cost is negligible.
+const DEVICE_PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
 impl App {
     /// Build the wallet cache from disk. Called as an associated function
     /// during `App::new` (before `self` exists) and as a method thereafter.
@@ -217,6 +223,15 @@ impl App {
         // switches to another wallet instead of finishing it — otherwise its
         // late result would create a second wallet and yank the user into it.
         self.trezor_import_rx = None;
+        // Link status belongs to the wallet being left; a late probe result
+        // would otherwise describe the old wallet's device.
+        self.device_status_rx = None;
+        self.device_status_probed_at = None;
+        self.device_status_strikes = 0;
+        self.device_status_pending = None;
+        self.device_status = trezor_connect::DeviceStatus::Working;
+        self.trezor_reconnect_rx = None;
+        self.device_popup_open = false;
 
         self.tx_history.clear();
         self.unconfirmed_tx_records.clear();
@@ -874,6 +889,70 @@ impl App {
                 }
                 Ok((model, variant, accounts))
             })();
+            let _ = tx.send(result);
+        });
+    }
+
+    /// True while one of our own operations owns the device.
+    ///
+    /// Read from live receivers rather than the last probe result: probe
+    /// results travel through a channel, so one can be produced while the
+    /// device is free and consumed after a session has claimed it. Anything
+    /// that displays "busy" must consult this, not the probe, or it will show a
+    /// device as available in the middle of a signature.
+    pub(crate) fn trezor_operation_in_flight(&self) -> bool {
+        self.trezor_import_rx.is_some()
+            || self.trezor_reconnect_rx.is_some()
+            // Signing shares its channel with the other auth methods, so it
+            // only implies device work on a device-backed wallet.
+            || (matches!(self.auth_method, Some(AuthMethod::Trezor { .. }))
+                && self.transaction_send_rx.is_some())
+    }
+
+    /// Refresh the Trezor link status if the cadence is due.
+    ///
+    /// No-op unless the open wallet is device-backed, and single-flight — a
+    /// wedged claim must not queue probe threads behind itself. The probe stands
+    /// aside on its own when one of our sessions is open (see
+    /// `trezor_connect::probe_link`), so an in-flight operation reports
+    /// `Working` rather than a spurious `Busy`.
+    pub(crate) fn probe_device_link(&mut self) {
+        if !matches!(self.auth_method, Some(AuthMethod::Trezor { .. })) {
+            return;
+        }
+        if self.device_status_rx.is_some() {
+            return;
+        }
+        if let Some(at) = self.device_status_probed_at {
+            if at.elapsed() < DEVICE_PROBE_INTERVAL {
+                return;
+            }
+        }
+        self.device_status_probed_at = Some(std::time::Instant::now());
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.device_status_rx = Some(rx);
+        std::thread::spawn(move || {
+            let _ = tx.send(trezor_connect::probe_link());
+        });
+    }
+
+    /// Re-establish a Trezor session on demand: the same connect the setup
+    /// screen's button performs — PIN and pairing included — but it creates no
+    /// wallet. Success only proves the device is reachable, so the handle is
+    /// dropped immediately and the link status refreshed.
+    pub(crate) fn reconnect_trezor(&mut self) {
+        if self.trezor_reconnect_rx.is_some() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.trezor_reconnect_rx = Some(rx);
+        self.status = Status::Info("Connecting to Trezor...".to_string());
+
+        std::thread::spawn(move || {
+            let result = trezor_connect::open(&mut trezor_connect::PinentryPairing)
+                .map(|device| device.model())
+                .map_err(|e| format!("Could not connect to Trezor: {}", e));
             let _ = tx.send(result);
         });
     }

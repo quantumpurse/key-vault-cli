@@ -6,6 +6,12 @@ use crate::types::{
 };
 use crate::App;
 use std::sync::mpsc;
+use trezor_connect::DeviceStatus;
+
+/// Consecutive failing probes before the UI calls the device offline or busy.
+/// At the 2s cadence this delays a genuine alarm by ~6s, which is well inside
+/// the time it takes a user to start an operation.
+const DEVICE_LINK_STRIKES: u8 = 3;
 
 impl App {
     /// Poll the transaction from channel and trigger signing on success.
@@ -601,6 +607,83 @@ impl App {
                 let msg = "Trezor import thread terminated unexpectedly.".to_string();
                 tracing::error!("{}", msg);
                 self.status = Status::Error(msg);
+            }
+        }
+    }
+
+    /// Pick up the latest device-link probe. Runs on every screen so the
+    /// telemetry segment stays truthful wherever the user is.
+    pub(crate) fn poll_device_status(&mut self) {
+        let rx = match &self.device_status_rx {
+            Some(rx) => rx,
+            None => return,
+        };
+        match rx.try_recv() {
+            Ok(link) => {
+                self.device_status_rx = None;
+                match link {
+                    // Trouble is only believed after several probes agree on
+                    // the *same* trouble. A probe can miss for reasons that are
+                    // not the device's fault — a dropped datagram, or the
+                    // emulator busy inside a SPHINCS+ keygen and not servicing
+                    // its socket — and a red "OFFLINE" alarm raised by one lost
+                    // packet is worse than being a few seconds late to a real
+                    // one. Counting the variant, not merely "something bad",
+                    // stops an established `Busy` from flipping to `Absent` on a
+                    // single sample and prevents alternating results from ever
+                    // reaching the threshold.
+                    DeviceStatus::Busy | DeviceStatus::Absent => {
+                        if self.device_status_pending == Some(link) {
+                            self.device_status_strikes =
+                                self.device_status_strikes.saturating_add(1);
+                        } else {
+                            self.device_status_pending = Some(link);
+                            self.device_status_strikes = 1;
+                        }
+                        if self.device_status_strikes >= DEVICE_LINK_STRIKES {
+                            self.device_status = link;
+                        }
+                    }
+                    // Good news, and "our own session is open", are both
+                    // certain — take them immediately.
+                    _ => {
+                        self.device_status_strikes = 0;
+                        self.device_status_pending = None;
+                        self.device_status = link;
+                    }
+                }
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.device_status_rx = None;
+            }
+        }
+    }
+
+    /// Finish a user-initiated reconnect. Success carries the model but creates
+    /// nothing; either way the link status is re-probed at once so the strip
+    /// reflects the outcome without waiting for the next cadence tick.
+    pub(crate) fn poll_trezor_reconnect(&mut self) {
+        let rx = match &self.trezor_reconnect_rx {
+            Some(rx) => rx,
+            None => return,
+        };
+        match rx.try_recv() {
+            Ok(Ok(model)) => {
+                self.trezor_reconnect_rx = None;
+                self.status = Status::Info(format!("{} connected.", model));
+                self.device_status_probed_at = None;
+            }
+            Ok(Err(e)) => {
+                self.trezor_reconnect_rx = None;
+                tracing::error!("{}", e);
+                self.status = Status::Error(e);
+                self.device_status_probed_at = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.trezor_reconnect_rx = None;
+                self.device_status_probed_at = None;
             }
         }
     }

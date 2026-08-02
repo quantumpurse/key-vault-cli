@@ -36,8 +36,8 @@ pub(crate) const QR_ADOPTION_RETRY: Duration = Duration::from_secs(300);
 use types::{
     AppColors, BalanceChartCache, BalanceResult, DaoQueryResult, DaoView, NodeStatus,
     NodeStatusUpdate, QrAdoptionUpdate, Screen, Series, Status, Tab, TransactionKind,
-    TransactionSendResult, TransactionStatus, TrezorImportUpdate, TxBuildResult, TxHistoryEvent,
-    TxRecord,
+    TransactionSendResult, TransactionStatus, TrezorImportUpdate,
+    TxBuildResult, TxHistoryEvent, TxRecord,
 };
 
 pub(crate) struct App {
@@ -207,6 +207,24 @@ pub(crate) struct App {
     // button waits and tells the user to look at the device, since a locked
     // Trezor holds the handshake open until its PIN is entered.
     pub(crate) trezor_import_rx: Option<mpsc::Receiver<TrezorImportUpdate>>,
+    // ── Trezor link status (device-backed wallets only) ──
+    // What the last probe saw. Never a live connection: the host opens a THP
+    // session per operation, so this is polled presence, not a held link.
+    pub(crate) device_status: trezor_connect::DeviceStatus,
+    pub(crate) device_status_rx: Option<mpsc::Receiver<trezor_connect::DeviceStatus>>,
+    /// When the last probe was dispatched; paces the poll. To control periodic probing
+    /// with Trezor device.
+    pub(crate) device_status_probed_at: Option<std::time::Instant>,
+    /// Consecutive probes reporting trouble. A single miss is not evidence —
+    /// see `poll_device_status`.
+    pub(crate) device_status_strikes: u8,
+    pub(crate) device_status_pending: Option<trezor_connect::DeviceStatus>,
+    /// In-flight user-initiated reconnect.
+    pub(crate) trezor_reconnect_rx: Option<mpsc::Receiver<Result<String, String>>>,
+    // Trezor status dropdown, anchored under the telemetry segment. Holds the
+    // reconnect control, so opening a session is always a deliberate choice.
+    pub(crate) device_popup_open: bool,
+    pub(crate) device_popup_rect: Option<egui::Rect>,
     // True when App::new put us into `Screen::Unlocked` directly
     // (password-mode wallet at startup) and the first frame still
     // needs to run the same fetches `unlock_with_passkey_finish` does. Cleared
@@ -495,6 +513,14 @@ impl App {
             // doesn't need it; Locked screen reads it before rendering.
             auth_method,
             trezor_import_rx: None,
+            device_status: trezor_connect::DeviceStatus::Working,
+            device_status_rx: None,
+            device_status_probed_at: None,
+            device_status_strikes: 0,
+            device_status_pending: None,
+            trezor_reconnect_rx: None,
+            device_popup_open: false,
+            device_popup_rect: None,
             needs_initial_fetch,
             multisig_modal_open: false,
             multisig_local_signer_idx: 0,
@@ -556,6 +582,12 @@ impl eframe::App for App {
         // moves us off it.
         self.poll_trezor_import();
 
+        // Device link: probed on its own cadence, polled everywhere. Both are
+        // no-ops unless the open wallet is device-backed.
+        self.probe_device_link();
+        self.poll_device_status();
+        self.poll_trezor_reconnect();
+
         if self.screen == Screen::Unlocked {
             self.poll_all_balances();
             self.poll_transaction_build();
@@ -592,6 +624,7 @@ impl eframe::App for App {
 
         // Show popups / modals if open.
         self.show_node_selector_popup(&ctx);
+        self.show_device_popup(&ctx);
         self.show_wallet_selector_popup(&ctx);
         self.show_wallet_modal(&ctx);
         self.show_multisig_modal(&ctx);

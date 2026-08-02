@@ -206,6 +206,7 @@ impl App {
             if seg.clicked() {
                 self.node_selector_open = !self.node_selector_open;
                 self.wallet_selector_open = false;
+                self.device_popup_open = false;
                 if self.node_selector_open {
                     let cfg = self.qp_client.config();
                     self.network = cfg.network;
@@ -219,6 +220,9 @@ impl App {
                 ui.ctx().request_repaint();
             }
             let _ = network_color;
+
+            // Draws its own leading divider, and only for device wallets.
+            self.draw_device_segment(ui, t);
 
             self.strip_divider(ui);
 
@@ -301,9 +305,72 @@ impl App {
                 if seg.clicked() || arrow_resp.clicked() {
                     self.wallet_selector_open = !self.wallet_selector_open;
                     self.node_selector_open = false;
+                    self.device_popup_open = false;
                 }
             });
         });
+    }
+
+    /// Trezor link segment — only for device-backed wallets.
+    ///
+    /// Speaks the same grammar as the node segment beside it: breathing dot,
+    /// condensed label, clickable. It reports *availability*, not readiness —
+    /// whether the device is unlocked cannot be known without starting a
+    /// handshake, which would prompt the user and so cannot be polled.
+    fn draw_device_segment(&mut self, ui: &mut egui::Ui, t: f32) {
+        use qpv2_core::types::AuthMethod;
+        use trezor_connect::DeviceStatus;
+
+        if !matches!(self.auth_method, Some(AuthMethod::Trezor { .. })) {
+            return;
+        }
+        self.strip_divider(ui);
+
+        // Any device operation in flight outranks the probe. Probe results
+        // arrive through a channel, so one can be dispatched while the device
+        // is free and consumed after a session has taken it — displaying
+        // LINKED over a device that is mid-signature. Live state is authoritative
+        // for "busy"; the probe only answers what we cannot observe directly.
+        let connecting = self.trezor_reconnect_rx.is_some();
+        let link = if self.trezor_operation_in_flight() {
+            DeviceStatus::Working
+        } else {
+            self.device_status
+        };
+
+        let (value, dot_color, urgent) = match link {
+            DeviceStatus::Linked => ("LINKED", self.colors.accent2, false),
+            DeviceStatus::Emulator => ("EMULATOR", self.colors.accent2, false),
+            DeviceStatus::Busy => ("IN USE", self.colors.warn, true),
+            DeviceStatus::Absent => ("OFFLINE", self.colors.danger, true),
+            DeviceStatus::Working => (
+                if connecting { "CONNECTING" } else { "WORKING" },
+                self.colors.accent,
+                false,
+            ),
+        };
+
+        let seg = self.strip_segment(ui, "TREZOR", value, None, Some((dot_color, urgent)), t);
+        ui.painter().text(
+            seg.rect.right_center() + egui::vec2(2.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            "▾",
+            egui::FontId::proportional(16.0),
+            self.colors.text_muted,
+        );
+        ui.add_space(10.0);
+
+        // Opens the detail dropdown; reconnecting is a deliberate choice made
+        // in there, never a side effect of clicking the strip.
+        self.device_popup_rect = Some(seg.rect);
+        if seg.clicked() {
+            self.device_popup_open = !self.device_popup_open;
+            self.node_selector_open = false;
+            self.wallet_selector_open = false;
+        }
+        if urgent || connecting {
+            ui.ctx().request_repaint();
+        }
     }
 
     /// One clickable label/value segment in the telemetry strip.
