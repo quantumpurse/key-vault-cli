@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 
 use qpv2_core::types::{SingleSigConvention, SpxVariant};
 
+use crate::link::acquire_session_guard;
 use crate::thp::pairing::{NoInteraction, PairingUx};
 use crate::thp::transport::{
     scan_usb, Transport, UdpTransport, UsbLocation, UsbTransport, EMULATOR_PORT,
@@ -63,8 +64,15 @@ pub struct DeviceAddress {
 }
 
 /// An open THP connection to a Trezor device.
-pub struct TrezorDevice {
+///
+/// Holds the device guard for its whole lifetime, so the status probe stands
+/// aside instead of competing for the USB interface — a probe's momentary claim
+/// landing mid-operation would otherwise fail the operation with "in use by
+/// another application", blaming Trezor Suite for our own status indicator.
+pub struct TrezorSession {
     pub(crate) session: ThpSession,
+    /// Released on drop; never read.
+    _guard: std::sync::MutexGuard<'static, ()>,
 }
 
 /// The network string the firmware expects.
@@ -110,27 +118,39 @@ pub fn list_devices() -> Vec<DeviceInfo> {
 /// the code entry via the stored credential, but still show a "Connect?"
 /// confirmation on the device each session (the credential is not the
 /// autoconnect kind).
-pub fn open(ux: &mut dyn PairingUx) -> Result<TrezorDevice, TrezorSignerError> {
+pub fn open(ux: &mut dyn PairingUx) -> Result<TrezorSession, TrezorSignerError> {
+    // Before the transport, which claims the USB interface.
+    let guard = acquire_session_guard().ok_or_else(session_busy)?;
     if std::env::var_os("QPV2_TREZOR_EMULATOR").is_none() {
         if let Some(loc) = scan_usb().into_iter().next() {
-            return open_transport(Box::new(UsbTransport::connect(loc)?), ux);
+            return open_transport(Box::new(UsbTransport::connect(loc)?), ux, guard);
         }
     }
-    open_transport(emulator_transport(EMULATOR_PORT)?, ux)
+    open_transport(emulator_transport(EMULATOR_PORT)?, ux, guard)
+}
+
+/// Another session of ours already owns the device. Distinct from the USB
+/// `Busy` message, which blames a different application.
+fn session_busy() -> TrezorSignerError {
+    TrezorSignerError::Client(
+        "the Trezor is busy with another operation — wait for it to finish and try again"
+            .to_string(),
+    )
 }
 
 /// Open a specific device previously returned by [`list_devices`].
 pub fn open_device(
     info: &DeviceInfo,
     ux: &mut dyn PairingUx,
-) -> Result<TrezorDevice, TrezorSignerError> {
+) -> Result<TrezorSession, TrezorSignerError> {
+    let guard = acquire_session_guard().ok_or_else(session_busy)?;
     let transport: Box<dyn Transport> = match info.location {
         DeviceLocation::Usb { bus, address } => {
             Box::new(UsbTransport::connect(UsbLocation { bus, address })?)
         }
         DeviceLocation::Emulator { port } => emulator_transport(port)?,
     };
-    open_transport(transport, ux)
+    open_transport(transport, ux, guard)
 }
 
 /// Open the local firmware emulator on the default port, without a pairing UX.
@@ -140,8 +160,13 @@ pub fn open_device(
 /// that into a clear error rather than blocking. Pair once by hand (the GUI, or
 /// the `thp_get_address` example) and the stored credential keeps every later
 /// call here unattended.
-pub fn open_emulator() -> Result<TrezorDevice, TrezorSignerError> {
-    open_transport(emulator_transport(EMULATOR_PORT)?, &mut NoInteraction)
+pub fn open_emulator() -> Result<TrezorSession, TrezorSignerError> {
+    let guard = acquire_session_guard().ok_or_else(session_busy)?;
+    open_transport(
+        emulator_transport(EMULATOR_PORT)?,
+        &mut NoInteraction,
+        guard,
+    )
 }
 
 fn emulator_transport(port: u16) -> Result<Box<dyn Transport>, TrezorSignerError> {
@@ -154,13 +179,15 @@ fn emulator_transport(port: u16) -> Result<Box<dyn Transport>, TrezorSignerError
 fn open_transport(
     transport: Box<dyn Transport>,
     ux: &mut dyn PairingUx,
-) -> Result<TrezorDevice, TrezorSignerError> {
-    Ok(TrezorDevice {
+    guard: std::sync::MutexGuard<'static, ()>,
+) -> Result<TrezorSession, TrezorSignerError> {
+    Ok(TrezorSession {
         session: ThpSession::connect(transport, ux)?,
+        _guard: guard,
     })
 }
 
-impl TrezorDevice {
+impl TrezorSession {
     /// Display label for the connected device.
     pub fn model(&self) -> String {
         "Trezor Safe".to_string()

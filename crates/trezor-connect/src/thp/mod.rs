@@ -86,8 +86,7 @@ impl ThpSession {
         client.call(0, &[]).map_err(|e| {
             log::debug!("channel allocation failed: {e}");
             TrezorSignerError::Client(
-                "no Trezor is responding — is the device plugged in and unlocked, \
-                 or the emulator running?"
+                "no response — is the Trezor device connected and unlocked?"
                     .to_string(),
             )
         })?;

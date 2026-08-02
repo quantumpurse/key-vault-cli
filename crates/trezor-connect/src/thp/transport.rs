@@ -20,9 +20,12 @@ pub(crate) const EMULATOR_PORT: u16 = 21324;
 
 /// Trezor USB identity: VID/PID in firmware mode (Model T and the Safe family
 /// share it), the WebUSB data interface, and its interrupt endpoint pair.
-const TREZOR_VID_PID: (u16, u16) = (0x1209, 0x53C1);
+///
+/// Defined by the firmware in
+/// `vendor/trezor-firmware/core/embed/io/usb/usb_config.c`.
+pub(crate) const TREZOR_VID_PID: (u16, u16) = (0x1209, 0x53C1);
 const USB_CONFIG_ID: u8 = 0;
-const USB_INTERFACE: u8 = 0;
+pub(crate) const USB_INTERFACE: u8 = 0;
 const USB_CLASS_VENDOR_SPEC: u8 = 0xff;
 const USB_ENDPOINT_OUT: u8 = 0x01;
 const USB_ENDPOINT_IN: u8 = 0x81;

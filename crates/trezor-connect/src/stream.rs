@@ -19,7 +19,7 @@ use protobuf::{Enum, Message, MessageField};
 use trezor_client::protos::{self, CKBTxRequestType};
 use trezor_client::TrezorMessage;
 
-use crate::device::{network_name, TrezorDevice};
+use crate::device::{network_name, TrezorSession};
 use crate::thp::ThpSession;
 use crate::TrezorSignerError;
 
@@ -39,7 +39,7 @@ pub struct SignedWitness {
     pub tx_hash: [u8; 32],
 }
 
-impl TrezorDevice {
+impl TrezorSession {
     /// Sign a CKB transaction on the device.
     ///
     /// `unsigned_tx` is the built transaction (with a placeholder witness);

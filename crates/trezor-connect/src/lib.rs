@@ -15,14 +15,16 @@
 mod conv;
 mod device;
 mod error;
+mod link;
 mod stream;
 mod thp;
 
 pub use device::{
     list_devices, open, open_device, open_emulator, DeviceAddress, DeviceInfo, DeviceLocation,
-    TrezorDevice, TREZOR_CONVENTION,
+    TrezorSession, TREZOR_CONVENTION,
 };
 pub use error::TrezorSignerError;
+pub use link::{probe_link, DeviceStatus};
 pub use stream::SignedWitness;
 pub use thp::pairing::{NoInteraction, PairingUx, PinentryPairing, StdinPairing};
 
