@@ -4,7 +4,7 @@ mod accounts;
 mod cosigner;
 mod dao;
 mod dashboard;
-mod hw_popup;
+mod hw_dropdown;
 mod main_stages;
 mod multisig;
 mod multisig_modal;

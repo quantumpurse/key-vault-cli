@@ -17,6 +17,11 @@ const TELEMETRY_H: f32 = 38.0;
 const STATUSLINE_H: f32 = 26.0;
 /// Width of the left module rail.
 const RAIL_W: f32 = 138.0;
+/// Width of a telemetry segment's dropdown caret, glyph plus its 2px offset.
+/// The carets are decoration only — the segment beside each one is the click
+/// target — but the wallet's sits in a right-to-left layout with nothing to its
+/// right to paint into, so it has to reserve this width to hold its place.
+const ARROW_W: f32 = 12.0;
 
 impl App {
     // ────────────────────────────────────────────────────────────────
@@ -122,193 +127,219 @@ impl App {
 
     /// Full-width strip: ident, node telemetry, tip block, network,
     /// then wallet identity and lock on the right.
+    ///
+    /// Each block is its own `draw_*` below. A block that can disappear owns
+    /// its leading divider so the two vanish together; the rest are free-
+    /// standing here, which is what makes the run's order readable in one view.
     fn draw_telemetry_strip(&mut self, ui: &mut egui::Ui) {
-        let c_accent = self.colors.accent;
-        let c_bg = self.colors.bg;
-        let c_text = self.colors.text;
-        let c_muted = self.colors.text_muted;
         let t = ui.input(|i| i.time) as f32;
 
         ui.horizontal_centered(|ui| {
             ui.add_space(12.0);
 
-            // Ident block: the qp∞ mark knocked out of the accent chip.
-            let (logo, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
-            draw_qp_logo_chip(ui.painter(), logo, c_accent, c_bg);
-            ui.add_space(8.0);
-            ui.label(
-                egui::RichText::new("QUANTUM PURSE")
-                    .font(display_font(12.0))
-                    .color(c_text),
-            );
-            ui.label(
-                egui::RichText::new(concat!("V", env!("CARGO_PKG_VERSION")).to_uppercase())
-                    .font(label_font(9.0))
-                    .color(c_muted),
-            );
-
+            self.draw_ident_block(ui);
             self.strip_divider(ui);
-
-            // ── Node segment (clickable → node selector) ──
-            let node_name = match self.qp_client.config().node_type {
-                NodeType::PublicRpc => "REMOTE RPC",
-                NodeType::LightClient => "LIGHT CLIENT",
-                NodeType::FullNode => "FULL NODE",
-            };
-            let network = match self.qp_client.network() {
-                ckb_node::NetworkType::Mainnet => "MAIN",
-                ckb_node::NetworkType::Testnet => "TEST",
-            };
-            let network_color = if self.qp_client.is_mainnet() {
-                self.colors.accent
-            } else {
-                self.colors.warn
-            };
-            let online = self.node_status.online;
-            let dot_color = if online {
-                self.colors.accent2
-            } else {
-                self.colors.danger
-            };
-
-            // Sync percentage rides along for local backends — this is
-            // its home; the Networks tab's backend cards show state only.
-            // Green once fully synced, accent while catching up.
-            let node_type = self.qp_client.config().node_type;
-            let sync_suffix = if online && node_type != NodeType::PublicRpc {
-                let pct = self.sync_pct(node_type);
-                let color = if pct >= 0.999 {
-                    self.colors.accent2
-                } else {
-                    self.colors.accent
-                };
-                Some((format!("{:.1}%", pct * 100.0), color))
-            } else {
-                None
-            };
-            let node_text = format!("{} / {}", node_name, network);
-            let seg = self.strip_segment(
-                ui,
-                "NODE",
-                &node_text,
-                sync_suffix.as_ref().map(|(s, c)| (s.as_str(), *c)),
-                Some((dot_color, !online)),
-                t,
-            );
-            ui.painter().text(
-                seg.rect.right_center() + egui::vec2(2.0, 0.0),
-                egui::Align2::LEFT_CENTER,
-                "▾",
-                egui::FontId::proportional(16.0),
-                c_muted,
-            );
-            ui.add_space(10.0);
-            self.node_selector_rect = Some(seg.rect);
-            if seg.clicked() {
-                self.node_selector_open = !self.node_selector_open;
-                self.wallet_selector_open = false;
-                self.device_popup_open = false;
-                if self.node_selector_open {
-                    let cfg = self.qp_client.config();
-                    self.network = cfg.network;
-                    self.node_type = cfg.node_type;
-                }
-            }
-            // Recolor of the network half happens via badge color below
-            // the generic segment; repaint while offline so the dot
-            // breathes.
-            if !online {
-                ui.ctx().request_repaint();
-            }
-            let _ = network_color;
-
+            self.draw_node_segment(ui, t);
+            self.strip_divider(ui);
+            self.draw_tip_block(ui);
+            // Draws its own leading divider, and only when peers are reported.
+            self.draw_peers_block(ui);
             // Draws its own leading divider, and only for device wallets.
             self.draw_device_segment(ui, t);
-
             self.strip_divider(ui);
+            self.draw_wallet_group(ui, t);
+        });
+    }
 
-            // ── Tip block (flashes on change) ──
-            let tip = self.node_status.tip_block();
-            let tip_text = tip
-                .map(crate::ui::utils::group_thousands)
-                .unwrap_or_else(|| "------".into());
-            ui.label(
-                egui::RichText::new("TIP")
-                    .font(label_font(9.0))
-                    .color(c_muted),
-            );
-            ui.add_space(2.0);
-            // Tip lives in the accent; a new block flashes it bright.
-            let flash = value_flash(ui, egui::Id::new("tip-flash"), tip.unwrap_or(0));
-            let tip_color = crate::ui::utils::lerp_color(c_accent, c_text, flash);
-            ui.label(egui::RichText::new(tip_text).size(11.5).color(tip_color));
+    /// Ident block: the qp∞ mark knocked out of the accent chip.
+    fn draw_ident_block(&self, ui: &mut egui::Ui) {
+        let (logo, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+        draw_qp_logo_chip(ui.painter(), logo, self.colors.accent, self.colors.bg);
+        ui.add_space(8.0);
+        ui.label(
+            egui::RichText::new("QUANTUM PURSE")
+                .font(display_font(12.0))
+                .color(self.colors.text),
+        );
+        ui.label(
+            egui::RichText::new(concat!("V", env!("CARGO_PKG_VERSION")).to_uppercase())
+                .font(label_font(9.0))
+                .color(self.colors.text_muted),
+        );
+    }
 
-            // Peer count, when the backend reports peers.
-            if !self.node_status.peers.is_empty() {
-                self.strip_divider(ui);
-                ui.label(
-                    egui::RichText::new("PEERS")
-                        .font(label_font(9.0))
-                        .color(c_muted),
-                );
-                ui.add_space(2.0);
-                // Green: peers present means healthy connectivity (the
-                // segment is hidden entirely at zero peers).
-                ui.label(
-                    egui::RichText::new(format!("{}", self.node_status.peers.len()))
-                        .size(11.5)
-                        .color(self.colors.accent2),
-                );
+    /// Node segment — clickable, opens the node selector.
+    fn draw_node_segment(&mut self, ui: &mut egui::Ui, t: f32) {
+        let c_muted = self.colors.text_muted;
+        let node_name = match self.qp_client.config().node_type {
+            NodeType::PublicRpc => "REMOTE",
+            NodeType::LightClient => "LIGHT",
+            NodeType::FullNode => "FULL",
+        };
+        let network = match self.qp_client.network() {
+            ckb_node::NetworkType::Mainnet => "MAIN",
+            ckb_node::NetworkType::Testnet => "TEST",
+        };
+        let network_color = if self.qp_client.is_mainnet() {
+            self.colors.accent
+        } else {
+            self.colors.warn
+        };
+        let online = self.node_status.online;
+        let dot_color = if online {
+            self.colors.accent2
+        } else {
+            self.colors.danger
+        };
+
+        // Sync percentage rides along for local backends — this is
+        // its home; the Networks tab's backend cards show state only.
+        // Green once fully synced, accent while catching up.
+        let node_type = self.qp_client.config().node_type;
+        let sync_suffix = if online && node_type != NodeType::PublicRpc {
+            let pct = self.sync_pct(node_type);
+            let color = if pct >= 0.999 {
+                self.colors.accent2
+            } else {
+                self.colors.accent
+            };
+            Some((format!("{:.1}%", pct * 100.0), color))
+        } else {
+            None
+        };
+        let node_text = format!("{} / {}", node_name, network);
+        let seg = self.strip_segment(
+            ui,
+            "NODE",
+            &node_text,
+            sync_suffix.as_ref().map(|(s, c)| (s.as_str(), *c)),
+            Some((dot_color, !online)),
+            t,
+        );
+        ui.painter().text(
+            seg.rect.right_center() + egui::vec2(2.0, 2.0),
+            egui::Align2::LEFT_CENTER,
+            "▾",
+            egui::FontId::proportional(16.0),
+            c_muted,
+        );
+        ui.add_space(10.0);
+        self.node_selector_rect = Some(seg.rect);
+        if seg.clicked() {
+            self.node_selector_open = !self.node_selector_open;
+            self.wallet_selector_open = false;
+            self.device_popup_open = false;
+            if self.node_selector_open {
+                let cfg = self.qp_client.config();
+                self.network = cfg.network;
+                self.node_type = cfg.node_type;
+            }
+        }
+        // Recolor of the network half happens via badge color below
+        // the generic segment; repaint while offline so the dot
+        // breathes.
+        if !online {
+            ui.ctx().request_repaint();
+        }
+        let _ = network_color;
+    }
+
+    /// Tip block, flashing bright on each new block.
+    fn draw_tip_block(&self, ui: &mut egui::Ui) {
+        let c_muted = self.colors.text_muted;
+        let tip = self.node_status.tip_block();
+        let tip_text = tip
+            .map(crate::ui::utils::group_thousands)
+            .unwrap_or_else(|| "------".into());
+        ui.label(
+            egui::RichText::new("TIP")
+                .font(label_font(9.0))
+                .color(c_muted),
+        );
+        ui.add_space(2.0);
+        // Tip lives in the accent; a new block flashes it bright.
+        let flash = value_flash(ui, egui::Id::new("tip-flash"), tip.unwrap_or(0));
+        let tip_color = crate::ui::utils::lerp_color(self.colors.accent, self.colors.text, flash);
+        ui.label(egui::RichText::new(tip_text).size(11.5).color(tip_color));
+    }
+
+    /// Peer count, when the backend reports peers.
+    ///
+    /// Draws its own leading divider: the block is conditional, so the divider
+    /// has to disappear with it rather than leave a stray line behind.
+    fn draw_peers_block(&self, ui: &mut egui::Ui) {
+        if self.node_status.peers.is_empty() {
+            return;
+        }
+        self.strip_divider(ui);
+        ui.label(
+            egui::RichText::new("PEERS")
+                .font(label_font(9.0))
+                .color(self.colors.text_muted),
+        );
+        ui.add_space(2.0);
+        // Green: peers present means healthy connectivity (the
+        // segment is hidden entirely at zero peers).
+        ui.label(
+            egui::RichText::new(format!("{}", self.node_status.peers.len()))
+                .size(11.5)
+                .color(self.colors.accent2),
+        );
+    }
+
+    /// Right side: lock + wallet, right-aligned against the strip's edge.
+    fn draw_wallet_group(&mut self, ui: &mut egui::Ui, t: f32) {
+        let c_muted = self.colors.text_muted;
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(12.0);
+
+            // Password is the only method without lock/unlock, deliberately
+            // (see the startup gate in `main.rs`): its passwords are 20+
+            // characters, too much friction to re-enter just to look at
+            // balances. Every other method locks — stated as an exclusion,
+            // like the startup gate, so a new method gets a lock by default.
+            if !matches!(self.auth_method, Some(AuthMethod::Password)) {
+                let lock = ghost_button(&self.colors, "LOCK", egui::vec2(56.0, 22.0));
+                if ui.add(lock).clicked() {
+                    self.lock_wallet();
+                }
+                ui.add_space(10.0);
             }
 
-            // ── Right side: lock + wallet ──
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(12.0);
-
-                // Password is the only method without lock/unlock, deliberately
-                // (see the startup gate in `main.rs`): its passwords are 20+
-                // characters, too much friction to re-enter just to look at
-                // balances. Every other method locks — stated as an exclusion,
-                // like the startup gate, so a new method gets a lock by default.
-                if !matches!(self.auth_method, Some(AuthMethod::Password)) {
-                    let lock = ghost_button(&self.colors, "LOCK", egui::vec2(56.0, 22.0));
-                    if ui.add(lock).clicked() {
-                        self.lock_wallet();
-                    }
-                    ui.add_space(10.0);
-                }
-
-                let variant = self
-                    .wallet_cache
-                    .iter()
-                    .find(|w| w.id == self.wallet_id)
-                    .map(|cw| format!("{}", cw.spx_variant));
-                let wallet_text = match &variant {
-                    Some(v) => format!("{} / {}", self.wallet_name.to_uppercase(), v),
-                    None => self.wallet_name.to_uppercase(),
-                };
-                // Dropdown arrow, mirroring the node selector's. RTL
-                // flow: allocated before the segment so it renders to
-                // the segment's right, clear of the LOCK button.
-                let (arrow, arrow_resp) = ui.allocate_exact_size(
-                    egui::vec2(14.0, TELEMETRY_H - 10.0),
-                    egui::Sense::click(),
-                );
-                ui.painter().text(
-                    arrow.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "▾",
-                    egui::FontId::proportional(16.0),
-                    c_muted,
-                );
-                let seg = self.strip_segment(ui, "VAULT", &wallet_text, None, None, t);
-                self.wallet_selector_rect = Some(seg.rect);
-                if seg.clicked() || arrow_resp.clicked() {
-                    self.wallet_selector_open = !self.wallet_selector_open;
-                    self.node_selector_open = false;
-                    self.device_popup_open = false;
-                }
-            });
+            let wallet_text = self.wallet_name.to_uppercase();
+            // Dropdown arrow, mirroring the node selector's. RTL
+            // flow: allocated before the segment so it renders to
+            // the segment's right, clear of the LOCK button.
+            //
+            // Unlike the other two this arrow is a real allocation, because
+            // RTL leaves no room to its right to paint into. That means
+            // egui's 8px item spacing lands between it and the label, which
+            // is what made this gap the widest of the three. Scoped to zero
+            // so the caret sits the same 2px off the label as the others,
+            // without disturbing the LOCK gap or the right margin outside.
+            let seg = ui
+                .scope(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    let (arrow, _) = ui.allocate_exact_size(
+                        egui::vec2(ARROW_W, TELEMETRY_H - 10.0),
+                        egui::Sense::hover(),
+                    );
+                    ui.painter().text(
+                        arrow.left_center() + egui::vec2(2.0, 2.0),
+                        egui::Align2::LEFT_CENTER,
+                        "▾",
+                        egui::FontId::proportional(16.0),
+                        c_muted,
+                    );
+                    self.strip_segment(ui, "WALLET", &wallet_text, None, None, t)
+                })
+                .inner;
+            self.wallet_selector_rect = Some(seg.rect);
+            if seg.clicked() {
+                self.wallet_selector_open = !self.wallet_selector_open;
+                self.node_selector_open = false;
+                self.device_popup_open = false;
+            }
         });
     }
 
@@ -353,7 +384,7 @@ impl App {
 
         let seg = self.strip_segment(ui, "TREZOR", value, None, Some((dot_color, urgent)), t);
         ui.painter().text(
-            seg.rect.right_center() + egui::vec2(2.0, 0.0),
+            seg.rect.right_center() + egui::vec2(2.0, 2.0),
             egui::Align2::LEFT_CENTER,
             "▾",
             egui::FontId::proportional(16.0),

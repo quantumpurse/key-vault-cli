@@ -744,7 +744,7 @@ pub(crate) fn draw_trend_chart(
         points.clone(),
         egui::Stroke::new(4.0, tint(22)),
     ));
-    painter.add(egui::Shape::line(points, egui::Stroke::new(2.0, dir)));
+    painter.add(egui::Shape::line(points, egui::Stroke::new(1.0, dir)));
 
     // ── Endpoint: a clean dot with a gently breathing halo at "now". ──
     let breath = 0.6 + 0.4 * (t * 1.4).sin();

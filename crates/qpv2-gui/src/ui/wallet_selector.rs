@@ -7,7 +7,7 @@ use crate::types::{label_font, WalletModal};
 use crate::ui::utils::row_hover;
 use crate::App;
 
-const POPUP_W: f32 = 320.0;
+const POPUP_W: f32 = 250.0;
 const ROW_H: f32 = 34.0;
 const PAD: f32 = 12.0;
 
@@ -117,14 +117,17 @@ impl App {
 
             let cy = rect.center().y;
 
-            // Right cluster: ACTIVE badge (active row only), then the
-            // SPHINCS+ variant code.
+            // Right cluster, painted right to left: the SPHINCS+ variant code
+            // anchors the edge, with the ACTIVE badge (active row only) to its
+            // left, then a uniform gap before the name.
             let mut rx = rect.right() - PAD;
-            if active {
-                rx -= paint_badge(painter, egui::pos2(rx, cy), "ACTIVE", c_accent) + 6.0;
-            }
             let variant = format!("{}", cw.spx_variant).to_uppercase();
-            rx -= paint_badge(painter, egui::pos2(rx, cy), &variant, c_muted) + 10.0;
+            rx -= paint_badge(painter, egui::pos2(rx, cy), &variant, c_muted);
+            if active {
+                rx -= 6.0;
+                rx -= paint_badge(painter, egui::pos2(rx, cy), "ACTIVE", c_accent);
+            }
+            rx -= 10.0;
 
             // Name, clipped so long names never run under the badges.
             let clip = egui::Rect::from_min_max(
