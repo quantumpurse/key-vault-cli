@@ -10,6 +10,32 @@
 TARGET="${1:-}"
 RELEASE="${2:-}"
 
+launch_gui() {
+	local build_type="$1"
+	local app_path="target/$build_type/qpv2.app"
+	local exe_path="$app_path/Contents/MacOS/qpv2-gui"
+
+	if [[ ! -x "$exe_path" ]]; then
+		echo "GUI app bundle not found at $app_path."
+		echo "Build it first with:"
+		if [[ "$build_type" == "release" ]]; then
+			echo "  ./build.sh gui --release"
+		else
+			echo "  ./build.sh gui"
+		fi
+		echo ""
+		echo "If this is a fresh clone, initialize submodules first:"
+		echo "  git submodule update --init --recursive"
+		exit 1
+	fi
+
+	if [[ "$build_type" == "release" ]]; then
+		open "$app_path"
+	else
+		"$exe_path"
+	fi
+}
+
 case "$TARGET" in
 	cli)
 		if [[ "$RELEASE" == "--release" ]]; then
@@ -20,9 +46,9 @@ case "$TARGET" in
 		;;
 	gui)
 		if [[ "$RELEASE" == "--release" ]]; then
-			open "target/release/qpv2.app"
+			launch_gui release
 		else
-			./target/debug/qpv2.app/Contents/MacOS/qpv2-gui
+			launch_gui debug
 		fi
 		;;
 	*)
