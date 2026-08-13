@@ -485,6 +485,7 @@ impl App {
                         }
 
                         // ── Status messages ──
+                        let mut copied_hash: Option<String> = None;
                         match &self.tx_status {
                             TransactionStatus::Success(tx_hash) => {
                                 ui.add_space(8.0);
@@ -511,7 +512,7 @@ impl App {
                                         ))
                                         .clicked()
                                     {
-                                        ui.ctx().copy_text(format!("0x{}", tx_hash));
+                                        copied_hash = Some(format!("0x{}", tx_hash));
                                     }
                                 });
                             }
@@ -531,6 +532,12 @@ impl App {
                                 });
                             }
                             _ => {}
+                        }
+
+                        if let Some(hash) = copied_hash {
+                            ui.ctx().copy_text(hash);
+                            self.status =
+                                Status::Info("Transaction hash copied!".to_string());
                         }
 
                         ui.add_space(12.0);

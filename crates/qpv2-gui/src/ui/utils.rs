@@ -94,6 +94,7 @@ impl App {
         let c = &self.colors;
         ui.add_space(10.0);
 
+        let mut copied_hash: Option<String> = None;
         match &self.tx_status {
             TransactionStatus::Idle => {}
             TransactionStatus::Building => log_line(
@@ -161,13 +162,18 @@ impl App {
                         .add(ghost_button(c, "COPY", egui::vec2(50.0, 20.0)))
                         .clicked()
                     {
-                        ui.ctx().copy_text(format!("0x{}", tx_hash));
+                        copied_hash = Some(format!("0x{}", tx_hash));
                     }
                 });
             }
             TransactionStatus::Error(msg) => {
                 log_line(ui, "[ ERR ]", c.danger, msg, c.danger, false)
             }
+        }
+
+        if let Some(hash) = copied_hash {
+            ui.ctx().copy_text(hash);
+            self.status = Status::Info("Transaction hash copied!".to_string());
         }
     }
 }
@@ -343,7 +349,7 @@ pub(crate) fn panel_frame(colors: &AppColors) -> egui::Frame {
 
 /// Pin a [`egui::ComboBox`]'s option list above the modal panel it was
 /// opened from.
-/// 
+///
 /// Fixing https://github.com/quantumpurse/quantum-purse-v2/issues/7
 ///
 /// Reopening a modal lifts its panel above the layer the popup left
