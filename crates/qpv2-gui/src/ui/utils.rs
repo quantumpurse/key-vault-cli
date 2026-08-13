@@ -341,6 +341,27 @@ pub(crate) fn panel_frame(colors: &AppColors) -> egui::Frame {
         .inner_margin(14.0)
 }
 
+/// Pin a [`egui::ComboBox`]'s option list above the modal panel it was
+/// opened from.
+/// 
+/// Fixing https://github.com/quantumpurse/quantum-purse-v2/issues/7
+///
+/// Reopening a modal lifts its panel above the layer the popup left
+/// behind in an earlier session, and a click whose press and release land
+/// in the same pass — a trackpad tap — leaves it there, so the list opens
+/// behind the opaque panel. The sublayer re-pins it above the panel every
+/// pass. Both layers must sit at `Order::Foreground`, which is where egui
+/// puts ComboBox popups.
+pub(crate) fn pin_popup_above_modal(ui: &egui::Ui, combo: &egui::Response) {
+    ui.ctx().set_sublayer(
+        ui.layer_id(),
+        egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Popup::default_response_id(combo),
+        ),
+    );
+}
+
 /// Sequential section codes ("01", "02", ...) handed out in render
 /// order, so a conditionally skipped section never leaves a gap in a
 /// screen's numbering.

@@ -4,8 +4,8 @@
 use eframe::egui;
 
 use super::utils::{
-    badge, ckb_split, extract_ar, format_duration_ms, ghost_button, panel_frame, row_hover,
-    section_header,
+    badge, ckb_split, extract_ar, format_duration_ms, ghost_button, panel_frame,
+    pin_popup_above_modal, row_hover, section_header,
 };
 use crate::types::{display_font, label_font, AppColors, DaoView, Status, TransactionStatus};
 use crate::utils::{format_ckb, format_ckb_balance};
@@ -290,7 +290,7 @@ impl App {
                         };
 
                         let prev_from_account = self.dao_deposit_from_account;
-                        egui::ComboBox::from_id_salt("dao_deposit_from")
+                        let from_combo = egui::ComboBox::from_id_salt("dao_deposit_from")
                             .selected_text(&from_text)
                             .width(ui.available_width())
                             .show_ui(ui, |ui| {
@@ -313,6 +313,7 @@ impl App {
                                     );
                                 }
                             });
+                        pin_popup_above_modal(ui, &from_combo.response);
                         if self.dao_deposit_from_account != prev_from_account
                             && self.dao_deposit_all
                         {

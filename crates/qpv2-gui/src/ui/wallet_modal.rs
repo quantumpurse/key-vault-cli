@@ -8,7 +8,8 @@ use qpv2_core::types::{SingleSigConvention, SpxVariant};
 
 use crate::types::{label_font, WalletModal};
 use crate::ui::utils::{
-    accent_button, ghost_button, section_header, v1_import_checkbox, SectionCounter,
+    accent_button, ghost_button, pin_popup_above_modal, section_header, v1_import_checkbox,
+    SectionCounter,
 };
 use crate::App;
 
@@ -124,7 +125,7 @@ impl App {
         // ── Parameter Set ──
         section_header(ui, &self.colors, &sec.next_code(), "Parameter Set");
         ui.add_space(6.0);
-        egui::ComboBox::from_id_salt("wallet_modal_variant")
+        let variant_combo = egui::ComboBox::from_id_salt("wallet_modal_variant")
             .selected_text(
                 egui::RichText::new(format!("SPHINCS+ {}", self.new_wallet_variant))
                     .size(12.0)
@@ -153,6 +154,7 @@ impl App {
                     ui.selectable_value(&mut self.new_wallet_variant, *variant, text);
                 }
             });
+        pin_popup_above_modal(ui, &variant_combo.response);
 
         ui.add_space(14.0);
 

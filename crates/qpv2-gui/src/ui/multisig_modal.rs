@@ -6,7 +6,7 @@ use eframe::egui;
 use qpv2_core::types::SpxVariant;
 
 use crate::types::label_font;
-use crate::ui::utils::{accent_button, ghost_button, section_header};
+use crate::ui::utils::{accent_button, ghost_button, pin_popup_above_modal, section_header};
 use crate::App;
 
 const MODAL_W: f32 = 480.0;
@@ -111,7 +111,7 @@ impl App {
         } else {
             c_accent
         };
-        egui::ComboBox::from_id_salt("ms_local_signer")
+        let signer_combo = egui::ComboBox::from_id_salt("ms_local_signer")
             .selected_text(
                 egui::RichText::new(&selected_text)
                     .size(12.0)
@@ -130,6 +130,7 @@ impl App {
                     ui.selectable_value(&mut self.multisig_local_signer_idx, pos, text);
                 }
             });
+        pin_popup_above_modal(ui, &signer_combo.response);
 
         ui.add_space(14.0);
 
@@ -182,7 +183,7 @@ impl App {
                                 .color(c_accent),
                         );
                         ui.add_space(6.0);
-                        egui::ComboBox::from_id_salt(("ms_variant", i))
+                        let variant_combo = egui::ComboBox::from_id_salt(("ms_variant", i))
                             .selected_text(
                                 egui::RichText::new(format!("{}", variant))
                                     .size(11.5)
@@ -197,6 +198,7 @@ impl App {
                                     ui.selectable_value(variant, *v, text);
                                 }
                             });
+                        pin_popup_above_modal(ui, &variant_combo.response);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let remove = egui::Button::new(
                                 egui::RichText::new("\u{2715}").size(11.0).color(c_danger),
