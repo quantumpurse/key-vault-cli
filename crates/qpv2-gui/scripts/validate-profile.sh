@@ -10,6 +10,8 @@
 # Usage:
 #   ./crates/qpv2-gui/scripts/validate-profile.sh <profile-path>
 
+# Abort on any failure, unset variable or failed pipeline stage, so a check
+# that never ran is never mistaken for a check that passed.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -27,37 +29,36 @@ if [ ! -f "$PROFILE" ]; then
 	exit 1
 fi
 
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/qpv2-profile.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT
+PLIST="$(mktemp)"
 
-# `security cms -D` verifies Apple's signature on the profile as it decodes.
-if ! security cms -D -i "$PROFILE" -o "$TMP/profile.plist" 2>/dev/null; then
-	echo "ERROR: Not a valid Apple-signed provisioning profile: $PROFILE"
+# When this script exits, remove the temp file.
+trap 'rm -f "$PLIST"' EXIT
+
+# Extract plist and put it in a temp file.
+if ! security cms -D -i "$PROFILE" -o "$PLIST" 2>/dev/null; then
+	echo "ERROR: Not a readable provisioning profile: $PROFILE"
 	exit 1
 fi
 
-# `|| true` on every read: PlistBuddy and plutil exit non-zero on a missing
-# key, which under `set -e` would abort on the assignment itself and skip
-# the descriptive check below.
-get() { /usr/libexec/PlistBuddy -c "Print :$1" "$TMP/profile.plist" 2>/dev/null || true; }
+# Read one key from the profile, empty if absent, so `set -e` cannot abort
+# before the check below reports which key was missing.
+get() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST" 2>/dev/null || true; }
 
 # ── 1. Expiry ─────────────────────────────────────────────────────
-# macOS evaluates an embedded Developer ID profile at every launch, so an
-# expired one stops the app starting at all, not just Touch ID.
-EXPIRES="$(plutil -extract ExpirationDate raw -o - "$TMP/profile.plist" 2>/dev/null || true)"
-EXPIRES_AT="$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$EXPIRES" "+%s" 2>/dev/null || true)"
-if [ -z "$EXPIRES_AT" ]; then
+# Reject an expired profile, which stops the app launching at all.
+EXPIRES="$(plutil -extract ExpirationDate raw -o - "$PLIST" 2>/dev/null || true)"
+EXPIRES_EPOCH="$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$EXPIRES" "+%s" 2>/dev/null || true)"
+if [ -z "$EXPIRES_EPOCH" ]; then
 	echo "ERROR: Could not read the profile's ExpirationDate (got '$EXPIRES')."
 	exit 1
 fi
-if [ "$EXPIRES_AT" -le "$(date -u "+%s")" ]; then
+if [ "$EXPIRES_EPOCH" -le "$(date -u "+%s")" ]; then
 	echo "ERROR: Provisioning profile expired at $EXPIRES."
 	exit 1
 fi
 
 # ── 2. Right kind of profile, for the right app ───────────────────
-# ProvisionsAllDevices marks a Developer ID profile; Mac Development and
-# Mac App Store profiles lack the key entirely and do not work here.
+# Reject anything but a Developer ID profile for this exact app.
 if [ "$(get ProvisionsAllDevices)" != "true" ]; then
 	echo "ERROR: Not a Developer ID profile. Mac Development and Mac App Store"
 	echo "       profiles cannot authorise a notarized outside-the-store app."
@@ -70,9 +71,7 @@ if [ "$PROFILE_APP_ID" != "$TEAM_ID.$BUNDLE_ID" ]; then
 fi
 
 # ── 3. Unauthorized entitlements ──────────────────────────────────
-# codesign will happily sign entitlements the profile does not grant; macOS
-# then ignores them at runtime. entitlements.plist is a flat dict, so its
-# top-level <key> elements are exactly what the app requests.
+# Reject a profile missing any entitlement the app requests.
 for KEY in $(plutil -convert xml1 -o - "$GUI_DIR/entitlements.plist" \
 	| grep -o '<key>[^<]*' | sed 's/<key>//'); do
 	if [ -z "$(get "Entitlements:$KEY")" ]; then
@@ -83,20 +82,19 @@ for KEY in $(plutil -convert xml1 -o - "$GUI_DIR/entitlements.plist" \
 done
 
 # ── 4. Certificate mismatch ───────────────────────────────────────
-# The profile authorises specific certificates. Renewing the Developer ID
-# certificate without regenerating the profile breaks the app at launch.
-if ! security find-certificate -c "$SIGNING_IDENTITY" -p > "$TMP/cert.pem" 2>/dev/null; then
+# Reject a profile that does not authorise the signing certificate.
+# A PEM body is base64 DER, which is exactly how the profile stores its
+# certificates, so the two compare directly as strings.
+WANT="$(security find-certificate -c "$SIGNING_IDENTITY" -p 2>/dev/null \
+	| sed '/CERTIFICATE/d' | tr -d '\n' || true)"
+if [ -z "$WANT" ]; then
 	echo "ERROR: Signing certificate '$SIGNING_IDENTITY' is not in the keychain."
 	exit 1
 fi
-openssl x509 -in "$TMP/cert.pem" -outform DER -out "$TMP/cert.der"
-WANT="$(shasum -a 256 "$TMP/cert.der" | awk '{print $1}')"
 INDEX=0
 MATCHED=false
-while plutil -extract "DeveloperCertificates.$INDEX" raw -o "$TMP/pc.b64" \
-	"$TMP/profile.plist" 2>/dev/null; do
-	base64 -D -i "$TMP/pc.b64" -o "$TMP/pc.der"
-	if [ "$(shasum -a 256 "$TMP/pc.der" | awk '{print $1}')" = "$WANT" ]; then
+while B64="$(plutil -extract "DeveloperCertificates.$INDEX" raw -o - "$PLIST" 2>/dev/null)"; do
+	if [ "$(printf %s "$B64" | tr -d '\n')" = "$WANT" ]; then
 		MATCHED=true
 		break
 	fi
