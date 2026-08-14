@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# For macos only!
+#
 # Launch QPV2 CLI or GUI.
 #
 # Usage:

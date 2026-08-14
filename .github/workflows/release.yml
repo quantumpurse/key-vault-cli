@@ -167,10 +167,33 @@ jobs:
         security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
     - name: Bundle app
-      run: crates/qpv2-gui/scripts/bundle-macos.sh --release
+      env:
+        APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      run: |
+        if [ -z "$APPLE_PROVISIONING_PROFILE_BASE64" ]; then
+          echo "ERROR: APPLE_PROVISIONING_PROFILE_BASE64 is not configured."
+          echo "       Without it the app ships without Touch ID support."
+          exit 1
+        fi
+        PROFILE_PATH="$RUNNER_TEMP/qpv2.provisionprofile"
+        echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
+        # Expiry, profile type, App ID, entitlements and certificate match.
+        # None of these are caught by codesign or notarization.
+        crates/qpv2-gui/scripts/validate-profile.sh "$PROFILE_PATH"
+        crates/qpv2-gui/scripts/bundle-macos.sh --release --profile "$PROFILE_PATH"
 
     - name: Sign app
-      run: crates/qpv2-gui/scripts/sign.sh --release
+      run: |
+        crates/qpv2-gui/scripts/sign.sh --release
+        # The profile is what authorises the Data Protection Keychain
+        # entitlements. Losing it is silent: the app still builds, signs
+        # and notarizes, and only fails when a user tries Touch ID.
+        if [ ! -f target/release/qpv2.app/Contents/embedded.provisionprofile ]; then
+          echo "ERROR: the signed app has no Contents/embedded.provisionprofile."
+          echo "       Touch ID would fail with -34018 for every user."
+          echo "       Check that the Bundle app step ran with --profile."
+          exit 1
+        fi
 
     - name: Notarize app
       env:

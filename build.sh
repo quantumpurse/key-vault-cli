@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
+# For macos only!
+#
 # Build QPV2 CLI or GUI.
 #
 # Usage:
-#   ./build.sh <cli|gui> [--release] [--sign] [--clean]
+#   ./build.sh <cli|gui> [--release] [--sign] [--clean] [--profile <path>]
 #
 # Flags:
 #   --release   Build in release mode.
 #   --sign      Code sign the output (macOS only). Signing will make final build not reproduceable.
 #   --clean     Clean workspace and all vendor build artifacts before building.
+#   --profile   macOS provisioning profile to embed in the GUI app.
 set -euo pipefail
 
 TARGET="${1:-}"
@@ -15,12 +18,26 @@ TARGET="${1:-}"
 CLEAN=false
 RELEASE=false
 SIGN=false
-for arg in "${@:2}"; do
-	case "$arg" in
-		--clean) CLEAN=true ;;
-		--release) RELEASE=true ;;
-		--sign) SIGN=true ;;
-		*) echo "Unknown flag: $arg"; exit 1 ;;
+PROFILE_PATH=""
+
+if [ $# -gt 0 ]; then
+	shift
+fi
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--clean) CLEAN=true; shift ;;
+		--release) RELEASE=true; shift ;;
+		--sign) SIGN=true; shift ;;
+		--profile)
+			if [ $# -lt 2 ]; then
+				echo "ERROR: --profile requires a path."
+				exit 1
+			fi
+			PROFILE_PATH="$2"
+			shift 2
+			;;
+		*) echo "Unknown flag: $1"; exit 1 ;;
 	esac
 done
 
@@ -70,19 +87,19 @@ case "$TARGET" in
 		;;
 	gui)
 		if [ "$RELEASE" = true ]; then
-			./crates/qpv2-gui/scripts/bundle-macos.sh --release
+			./crates/qpv2-gui/scripts/bundle-macos.sh --release --profile "$PROFILE_PATH"
 			if [ "$SIGN" = true ]; then
 				./crates/qpv2-gui/scripts/sign.sh --release
 			fi
 		else
-			./crates/qpv2-gui/scripts/bundle-macos.sh
+			./crates/qpv2-gui/scripts/bundle-macos.sh --profile "$PROFILE_PATH"
 			if [ "$SIGN" = true ]; then
 				./crates/qpv2-gui/scripts/sign.sh
 			fi
 		fi
 		;;
 	*)
-		echo "Usage: ./build.sh <cli|gui> [--release] [--sign] [--clean]"
+		echo "Usage: ./build.sh <cli|gui> [--release] [--sign] [--clean] [--profile <path>]"
 		exit 1
 		;;
 esac

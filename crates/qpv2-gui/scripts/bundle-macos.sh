@@ -5,7 +5,7 @@
 # Info.plist. Run sign.sh afterwards for code signing.
 #
 # Usage:
-#   ./crates/qpv2-gui/scripts/bundle-macos.sh [--release]
+#   ./crates/qpv2-gui/scripts/bundle-macos.sh [--release] [--profile <path>]
 
 set -euo pipefail
 
@@ -15,9 +15,15 @@ PROJECT_ROOT="$(cd "$GUI_DIR/../.." && pwd)"
 
 source "$SCRIPT_DIR/config.sh"
 
+# The build succeeds without a profile, so the warning has to survive a
+# wall of scrolling cargo output. GitHub Actions renders ANSI too.
+YELLOW=$'\033[33m'
+RESET=$'\033[0m'
+
 # Parse arguments.
 BUILD_TYPE="debug"
 CARGO_FLAGS=""
+PROFILE_PATH=""
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--release)
@@ -25,9 +31,13 @@ while [[ $# -gt 0 ]]; do
 			CARGO_FLAGS="--release"
 			shift
 			;;
+		--profile)
+			PROFILE_PATH="$2"
+			shift 2
+			;;
 		*)
 			echo "Unknown argument: $1"
-			echo "Usage: $0 [--release]"
+			echo "Usage: $0 [--release] [--profile <path>]"
 			exit 1
 			;;
 	esac
@@ -35,6 +45,11 @@ done
 
 TARGET_DIR="$PROJECT_ROOT/target/$BUILD_TYPE"
 APP_BUNDLE="$TARGET_DIR/$APP_NAME.app"
+
+# Validate the provisioning profile.
+if [ -n "$PROFILE_PATH" ]; then
+	"$SCRIPT_DIR/validate-profile.sh" "$PROFILE_PATH"
+fi
 
 # ── Build pinentry ────────────────────────────────────────────────
 
@@ -149,6 +164,20 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 </dict>
 </plist>
 PLIST
+
+# Embed the provisioning profile. macOS only honours the restricted
+# entitlements in entitlements.plist when a profile authorises them, and
+# the Touch ID key lives in the Data Protection Keychain, which those
+# entitlements gate. The profile must land here before sign.sh runs so
+# that codesign seals it into the bundle.
+if [ -n "$PROFILE_PATH" ]; then
+	echo "==> Embedding provisioning profile: $PROFILE_PATH"
+	cp "$PROFILE_PATH" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+else
+	echo "${YELLOW}==> WARNING: No provisioning profile specified."
+	echo "    Touch ID will fail with -34018 without a provisioning profile."
+	echo "    Use --profile <path> to provide one.${RESET}"
+fi
 
 echo ""
 echo "==> Bundle created: $APP_BUNDLE"

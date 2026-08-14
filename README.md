@@ -32,8 +32,10 @@ Build toolchain: `brew install automake gettext && xcode-select --install`
 cargo build -p qpv2-cli --release
 
 # GUI (builds, bundles, and optionally signs the .app)
-./build.sh <cli|gui> [--release] [--sign] [--clean]
+./build.sh <cli|gui> [--release] [--sign] [--clean] [--profile <path>]
 # --sign requires an Apple develop id. Skip if you don't have one.
+# --profile embeds a provisioning profile, which macOS requires before Touch ID
+# will work. Needs an Apple develop id too. Skip if you don't have one.
 # --clean will rebuild fresh.
 # --release will build optimized release bin (faster). Without this flag, it will build debug binary (slower, but watchable)
 ./launch.sh <cli|gui> [--release]
