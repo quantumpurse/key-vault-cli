@@ -215,6 +215,12 @@ impl App {
             return;
         }
 
+        // When DAO deposit transaction succeeds, close the modal and return.
+        if matches!(self.tx_status, TransactionStatus::Success(_)) {
+            self.dao_view = DaoView::Overview;
+            return;
+        }
+
         let is_busy = !matches!(
             self.tx_status,
             TransactionStatus::Idle | TransactionStatus::Success(_) | TransactionStatus::Error(_)
