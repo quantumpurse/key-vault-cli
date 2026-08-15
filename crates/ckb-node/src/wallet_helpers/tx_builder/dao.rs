@@ -6,12 +6,11 @@ use ckb_sdk::{
     constants::DAO_TYPE_HASH,
     traits::CellDepResolver,
     tx_builder::{
-        balance_tx_capacity,
         dao::{
             DaoDepositBuilder, DaoDepositReceiver, DaoPrepareBuilder, DaoPrepareItem,
             DaoWithdrawBuilder, DaoWithdrawItem, DaoWithdrawReceiver,
         },
-        CapacityBalancer, CapacityProvider, TxBuilder,
+        fill_placeholder_witnesses, CapacityBalancer, CapacityProvider, TxBuilder,
     },
     Address,
 };
@@ -27,8 +26,12 @@ const DEFAULT_PLACEHOLDER_LOCK_SIZE: usize = 65;
 
 /// Builds a balanced DAO transaction from an SDK builder.
 ///
-/// Shared by deposit, prepare, and withdraw builders since the balancing
-/// and resolution logic is identical.
+/// Shared by the deposit and withdraw (phase 2) builders: the balancer setup,
+/// the dependency resolvers and the build-then-balance sequence are the same
+/// for both. What differs is which output pays the fee, which is why
+/// `fee_output_without_change` is a parameter - a deposit always leaves change
+/// and must use it, while a phase 2 withdraw never leaves change and pays from
+/// its receiver cell instead.
 fn build_balanced_dao_tx(
     builder: &dyn TxBuilder,
     lock_script: &Script,
@@ -36,6 +39,7 @@ fn build_balanced_dao_tx(
     qp_client: &QpClient,
     is_mainnet: bool,
     placeholder_lock_size: usize,
+    fee_output_without_change: Option<usize>,
 ) -> Result<TransactionView, NodeManagerError> {
     let placeholder_witness = WitnessArgs::new_builder()
         .lock(Some(Bytes::from(vec![0u8; placeholder_lock_size])).pack())
@@ -56,18 +60,53 @@ fn build_balanced_dao_tx(
     let header_dep_resolver = qp_client.header_dep_resolver();
     let tx_dep_provider = qp_client.tx_dep_provider();
 
-    let tx = builder
-        .build_balanced(
+    let base_tx = builder
+        .build_base(
             &mut *cell_collector,
             &cell_dep_resolver,
             &*header_dep_resolver,
             &*tx_dep_provider,
-            &balancer,
-            &Default::default(),
         )
         .map_err(|e| NodeManagerError::RpcError(format!("Failed to build DAO tx: {:?}", e)))?;
 
-    Ok(tx)
+    let (tx_filled_witnesses, _) =
+        fill_placeholder_witnesses(base_tx, &*tx_dep_provider, &Default::default()).map_err(
+            |e| {
+                NodeManagerError::RpcError(format!("Failed to fill placeholder witnesses: {:?}", e))
+            },
+        )?;
+
+    let (tx, change_index) = balancer
+        .rebalance_tx_capacity(
+            &tx_filled_witnesses,
+            &mut *cell_collector,
+            &*tx_dep_provider,
+            &cell_dep_resolver,
+            &*header_dep_resolver,
+            0,
+            None,
+        )
+        .map_err(|e| NodeManagerError::RpcError(format!("Failed to balance DAO tx: {:?}", e)))?;
+
+    // TODO still ad-hoc, improve.
+    let change_cell_index = change_index.or(fee_output_without_change).ok_or_else(|| {
+        NodeManagerError::RpcError(
+            "Cannot meet the requested fee rate: the balanced DAO transaction has no change \
+                 cell, and this path does not nominate another output to pay from."
+                .to_string(),
+        )
+    })?;
+
+    // The balancer rounds the fee down; raise it so the transaction meets
+    // the rate the user entered.
+    super::utils::enforce_ceiling_fee(
+        tx,
+        fee_rate,
+        lock_script,
+        change_cell_index,
+        &*tx_dep_provider,
+        &*header_dep_resolver,
+    )
 }
 
 /// Builder for DAO deposit transactions.
@@ -125,6 +164,7 @@ impl<'a> QpDaoDepositBuilder<'a> {
             self.qp_client,
             self.is_mainnet,
             self.placeholder_lock_size,
+            None,
         )
     }
 
@@ -200,7 +240,7 @@ impl<'a> QpDaoDepositBuilder<'a> {
             .build();
 
         let tx_size = provisional_tx.data().as_reader().serialized_size_in_block() as u64;
-        let required_fee = fee_rate.saturating_mul(tx_size).div_ceil(1000);
+        let required_fee = super::utils::ceiling_fee(fee_rate, tx_size);
         let deposit_capacity = total_input_capacity
             .checked_sub(required_fee)
             .ok_or_else(|| {
@@ -362,19 +402,40 @@ impl<'a> QpDaoPrepareBuilder<'a> {
             force_small_change_as_fee: None,
         };
 
-        let tx = balance_tx_capacity(
-            &patched_tx,
-            &balancer,
-            &mut *cell_collector,
-            &*tx_dep_provider,
-            &cell_dep_resolver,
-            &*header_dep_resolver,
-        )
-        .map_err(|e| {
-            NodeManagerError::RpcError(format!("Failed to balance DAO prepare: {:?}", e))
+        let (tx, change_index) = balancer
+            .rebalance_tx_capacity(
+                &patched_tx,
+                &mut *cell_collector,
+                &*tx_dep_provider,
+                &cell_dep_resolver,
+                &*header_dep_resolver,
+                0,
+                None,
+            )
+            .map_err(|e| {
+                NodeManagerError::RpcError(format!("Failed to balance DAO prepare: {:?}", e))
+            })?;
+
+        // TODO very rare: only when the difference between the input and output capacities equals exactly
+        // floor(fee_rate * tx_size / 1000), leaving nothing for a change cell. One shannon either way and
+        // the balancer creates one. Revisit and ship at the floor fee instead of failing.
+        let change_index = change_index.ok_or_else(|| {
+            NodeManagerError::RpcError(
+                "Cannot meet the requested fee rate: the balanced DAO prepare has no change cell."
+                    .to_string(),
+            )
         })?;
 
-        Ok(tx)
+        // The balancer rounds the fee down; raise it so the transaction meets
+        // the rate the user entered.
+        super::utils::enforce_ceiling_fee(
+            tx,
+            fee_rate,
+            &lock_script,
+            change_index,
+            &*tx_dep_provider,
+            &*header_dep_resolver,
+        )
     }
 }
 
@@ -449,6 +510,10 @@ impl<'a> QpDaoWithdrawBuilder<'a> {
 
         let withdraw_builder = DaoWithdrawBuilder::new(items, receiver);
 
+        // The receiver above carries a fee rate, so the SDK pays the fee out of
+        // the withdrawn capacity and the balancer adds no change cell. Output 0
+        // is that receiver cell - the sender's own - so it absorbs the
+        // shortfall.
         build_balanced_dao_tx(
             &withdraw_builder,
             &lock_script,
@@ -456,6 +521,7 @@ impl<'a> QpDaoWithdrawBuilder<'a> {
             self.qp_client,
             self.is_mainnet,
             self.placeholder_lock_size,
+            Some(0),
         )
     }
 }

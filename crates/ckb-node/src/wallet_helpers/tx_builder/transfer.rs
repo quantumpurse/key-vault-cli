@@ -5,7 +5,8 @@ use crate::error::NodeManagerError;
 use ckb_sdk::{
     traits::CellDepResolver,
     tx_builder::{
-        transfer::CapacityTransferBuilder, CapacityBalancer, CapacityProvider, TxBuilder,
+        fill_placeholder_witnesses, transfer::CapacityTransferBuilder, CapacityBalancer,
+        CapacityProvider, TxBuilder,
     },
     Address,
 };
@@ -100,7 +101,7 @@ impl<'a> QpTransferBuilder<'a> {
             fee_rate: FeeRate::from_u64(fee_rate),
             change_lock_script: Some(from_lock_script.clone()),
             capacity_provider: CapacityProvider::new_simple(vec![(
-                from_lock_script,
+                from_lock_script.clone(),
                 placeholder_witness,
             )]),
             force_small_change_as_fee: None,
@@ -115,20 +116,60 @@ impl<'a> QpTransferBuilder<'a> {
         let tx_dep_provider = self.qp_client.tx_dep_provider();
 
         // Build the transaction
-        let tx = transfer_builder
-            .build_balanced(
+        let base_tx = transfer_builder
+            .build_base(
                 &mut *cell_collector,
                 &cell_dep_resolver,
                 &*header_dep_resolver,
                 &*tx_dep_provider,
-                &balancer,
-                &Default::default(),
             )
             .map_err(|e| {
                 NodeManagerError::RpcError(format!("Failed to build transfer: {:?}", e))
             })?;
 
-        Ok(tx)
+        let (tx_filled_witnesses, _) = fill_placeholder_witnesses(
+            base_tx,
+            &*tx_dep_provider,
+            &Default::default(),
+        )
+        .map_err(|e| {
+            NodeManagerError::RpcError(format!("Failed to fill placeholder witnesses: {:?}", e))
+        })?;
+
+        let (tx, change_index) = balancer
+            .rebalance_tx_capacity(
+                &tx_filled_witnesses,
+                &mut *cell_collector,
+                &*tx_dep_provider,
+                &cell_dep_resolver,
+                &*header_dep_resolver,
+                0,
+                None,
+            )
+            .map_err(|e| {
+                NodeManagerError::RpcError(format!("Failed to balance transfer: {:?}", e))
+            })?;
+
+        // TODO very rare: only when the difference between the input and output capacities equals exactly
+        // floor(fee_rate * tx_size / 1000), leaving nothing for a change cell. One shannon either way and
+        // the balancer creates one. Revisit and ship at the floor fee instead of failing.
+        let change_index = change_index.ok_or_else(|| {
+            NodeManagerError::RpcError(
+                "Cannot meet the requested fee rate: the balanced transfer has no change cell."
+                    .to_string(),
+            )
+        })?;
+
+        // The balancer rounds the fee down; raise it so the transaction render (the explorer)
+        // meets the rate the user intended to set.
+        super::utils::enforce_ceiling_fee(
+            tx,
+            fee_rate,
+            &from_lock_script,
+            change_index,
+            &*tx_dep_provider,
+            &*header_dep_resolver,
+        )
     }
 
     /// Builds an unsigned transfer transaction that sends all spendable balance
@@ -211,11 +252,7 @@ impl<'a> QpTransferBuilder<'a> {
             .build();
 
         let tx_size = provisional_tx.data().as_reader().serialized_size_in_block() as u64;
-        // TODO check.
-        // Use ceiling division to ensure the fee meets or exceeds the requested rate.
-        // FeeRate::fee() uses floor division, which can underpay by up to 999 shannons
-        // and causes the explorer to report a fee_rate 1 lower than requested.
-        let required_fee = fee_rate.saturating_mul(tx_size).div_ceil(1000);
+        let required_fee = super::utils::ceiling_fee(fee_rate, tx_size);
         let final_output_capacity =
             total_input_capacity
                 .checked_sub(required_fee)
