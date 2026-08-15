@@ -95,12 +95,19 @@ impl App {
                         self.tx_status = TransactionStatus::Idle;
                     }
                     ui.add_space(6.0);
-                    // Like the cards they replace, these two are entry
-                    // points in name only: the working controls are the
-                    // per-row REQUEST / WITHDRAW actions in the table.
-                    let _ = ui.add(ghost_button(&self.colors, "REQUEST WITHDRAWAL", size));
+                    // TODO: enable later when figure out their UX.
+                    ui.add_enabled(
+                        false,
+                        ghost_button(&self.colors, "REQUEST WITHDRAWAL", size),
+                    )
+                    .on_disabled_hover_text(
+                        "Use the REQUEST action on a deposited position in the table below.",
+                    );
                     ui.add_space(6.0);
-                    let _ = ui.add(ghost_button(&self.colors, "WITHDRAW", size));
+                    ui.add_enabled(false, ghost_button(&self.colors, "WITHDRAW", size))
+                        .on_disabled_hover_text(
+                            "Use the WITHDRAW action on a prepared position in the table below.",
+                        );
                 });
 
                 // The in-flight transaction status, and — when a multisig
