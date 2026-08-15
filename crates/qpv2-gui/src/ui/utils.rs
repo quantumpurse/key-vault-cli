@@ -7,6 +7,47 @@ use std::time::Duration;
 use crate::types::{label_font, AppColors, Status, TransactionStatus};
 use crate::App;
 
+/// Middle-truncate a long identifier so table rows stay one line, keeping
+/// `head` leading and `tail` trailing characters. Char-based so multi-byte
+/// text (e.g. filesystem paths) can't split a code point.
+///
+/// Use this for values whose two ends both carry meaning — addresses,
+/// public keys, node IDs, outpoints. Use [`truncate_tail`] for text that is
+/// front-loaded instead.
+pub(crate) fn truncate_middle(s: &str, head: usize, tail: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= head + tail + 1 {
+        return s.to_string();
+    }
+    let head_s: String = chars[..head].iter().collect();
+    let tail_s: String = chars[chars.len() - tail..].iter().collect();
+    format!("{}…{}", head_s, tail_s)
+}
+
+/// Middle-truncate to a total width rather than an explicit head and tail,
+/// splitting the budget evenly. A budget under 8 characters leaves too
+/// little either side to identify anything, so the value is left whole and
+/// the caller's column overflows visibly instead of silently misleading.
+pub(crate) fn truncate_middle_to(s: &str, max_chars: usize) -> String {
+    if max_chars < 8 {
+        return s.to_string();
+    }
+    let keep = (max_chars - 1) / 2;
+    truncate_middle(s, keep, keep)
+}
+
+/// Tail-truncate front-loaded text, where the end carries no information —
+/// a version string like `0.209.0 (d166e28 2026-07-29)` is identified by
+/// its number, not its build hash.
+pub(crate) fn truncate_tail(s: &str, max_chars: usize) -> String {
+    let n = s.chars().count();
+    if n <= max_chars {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(max_chars.saturating_sub(1)).collect();
+    format!("{}…", head)
+}
+
 impl App {
     pub(crate) fn compute_dao_apc(&self) -> String {
         let tip = match &self.node_status.tip_header {

@@ -2,7 +2,8 @@
 
 use eframe::egui;
 
-use super::accounts::{header_cell, table_rule, truncate_middle};
+use super::accounts::{header_cell, table_rule};
+use super::utils::truncate_middle;
 use super::utils::{
     accent_button, badge, ckb_split, ghost_button, panel_frame, row_hover, section_header,
     SectionCounter,

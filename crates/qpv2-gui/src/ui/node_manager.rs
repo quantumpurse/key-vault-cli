@@ -6,8 +6,8 @@ use eframe::egui;
 use crate::types::{display_font, label_font, Status};
 use crate::ui::utils::{
     breathing_dot, ckb_split, data_row, data_row_colored, draw_trend_chart, ghost_button,
-    group_thousands, lerp_color, panel_frame, row_hover, section_header, value_flash,
-    SectionCounter,
+    group_thousands, lerp_color, panel_frame, row_hover, section_header, truncate_middle_to,
+    truncate_tail, value_flash, SectionCounter,
 };
 use crate::App;
 
@@ -597,7 +597,7 @@ impl App {
             painter.text(
                 egui::pos2(rr.left() + col_args, cy),
                 egui::Align2::LEFT_CENTER,
-                mid_truncate(&entry.args, args_chars),
+                truncate_middle_to(&entry.args, args_chars),
                 egui::FontId::proportional(10.5),
                 c_muted,
             );
@@ -988,14 +988,14 @@ impl App {
             painter.text(
                 egui::pos2(rr.left() + 6.0, cy),
                 egui::Align2::LEFT_CENTER,
-                mid_truncate(&peer.node_id, id_chars),
+                truncate_middle_to(&peer.node_id, id_chars),
                 egui::FontId::proportional(10.5),
                 c_text,
             );
             painter.text(
                 egui::pos2(rr.left() + col_ver, cy),
                 egui::Align2::LEFT_CENTER,
-                tail_truncate(&peer.version, ver_chars),
+                truncate_tail(&peer.version, ver_chars),
                 egui::FontId::proportional(10.5),
                 c_muted,
             );
@@ -1033,28 +1033,6 @@ impl App {
 }
 
 // ── Free functions ───────────────────────────────────────────
-
-/// Middle-truncate an identifier to `max_chars`, keeping head and tail.
-fn mid_truncate(s: &str, max_chars: usize) -> String {
-    let n = s.chars().count();
-    if n <= max_chars || max_chars < 8 {
-        return s.to_string();
-    }
-    let keep = (max_chars - 1) / 2;
-    let head: String = s.chars().take(keep).collect();
-    let tail: String = s.chars().skip(n - keep).collect();
-    format!("{}\u{2026}{}", head, tail)
-}
-
-/// Tail-truncate free-form text (e.g. version strings) to `max_chars`.
-fn tail_truncate(s: &str, max_chars: usize) -> String {
-    let n = s.chars().count();
-    if n <= max_chars {
-        return s.to_string();
-    }
-    let head: String = s.chars().take(max_chars.saturating_sub(1)).collect();
-    format!("{}\u{2026}", head)
-}
 
 fn full_node_sync_pct(sync_state: Option<&ckb_jsonrpc_types::SyncState>) -> f32 {
     let Some(s) = sync_state else {

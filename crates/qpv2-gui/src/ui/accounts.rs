@@ -6,22 +6,10 @@ use qpv2_core::KeyVault;
 
 use super::utils::{
     accent_button, badge, ckb_split, ghost_button, panel_frame, row_hover, section_header,
+    truncate_middle,
 };
 use crate::types::{display_font, label_font, AppColors, Status};
 use crate::App;
-
-/// Middle-truncate a long identifier so registry rows stay one line.
-/// Char-based so multi-byte text (e.g. filesystem paths) can't split a
-/// code point.
-pub(crate) fn truncate_middle(s: &str, head: usize, tail: usize) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= head + tail + 1 {
-        return s.to_string();
-    }
-    let head_s: String = chars[..head].iter().collect();
-    let tail_s: String = chars[chars.len() - tail..].iter().collect();
-    format!("{}…{}", head_s, tail_s)
-}
 
 /// Tiny uppercase column header cell. Shared by the registry tables in
 /// the Accounts / Multisig / Wallets tabs.

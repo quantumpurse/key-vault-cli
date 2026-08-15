@@ -3,10 +3,9 @@
 
 use eframe::egui;
 
-use super::accounts::truncate_middle;
 use super::utils::{
     badge, ckb_split, extract_ar, format_duration_ms, ghost_button, panel_frame,
-    pin_popup_above_modal, row_hover, section_header,
+    pin_popup_above_modal, row_hover, section_header, truncate_middle,
 };
 use crate::types::{display_font, label_font, AppColors, DaoView, Status, TransactionStatus};
 use crate::utils::{format_ckb, format_ckb_balance};

@@ -5,7 +5,8 @@ use eframe::egui;
 use qpv2_core::types::{AuthMethod, SingleSigConvention};
 use qpv2_core::KeyVault;
 
-use super::accounts::{header_cell, table_rule, truncate_middle};
+use super::accounts::{header_cell, table_rule};
+use super::utils::truncate_middle;
 use super::utils::{accent_button, badge, ghost_button, panel_frame, row_hover, section_header};
 use crate::types::{display_font, label_font, Status};
 use crate::App;
