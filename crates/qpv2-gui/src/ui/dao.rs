@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use super::accounts::truncate_middle;
 use super::utils::{
     badge, ckb_split, extract_ar, format_duration_ms, ghost_button, panel_frame,
     pin_popup_above_modal, row_hover, section_header,
@@ -28,7 +29,7 @@ impl App {
                 );
                 ui.add_space(2.0);
                 ui.label(
-                    egui::RichText::new("Deposit, withdraw, and manage DAO positions.")
+                    egui::RichText::new("Deposit, withdraw, and manage DAO deposit positions.")
                         .size(11.0)
                         .color(self.colors.text_muted),
                 );
@@ -887,10 +888,9 @@ fn ckb_amount(
     );
 }
 
-/// Outpoint cell: a truncating, copy-on-click `0x<tx_hash>:<index>`. The
-/// hash rarely fits at narrow widths, so the full value is always on the
-/// hover tooltip and the clipboard. Returns the string to copy when the
-/// cell is clicked.
+/// Outpoint cell: a shortened, copy-on-click `0x<tx_hash>:<index>`. The
+/// hash never fits the column, so the full value is on the hover tooltip
+/// and the clipboard. Returns the string to copy when the cell is clicked.
 fn outpoint_cell(
     ui: &mut egui::Ui,
     colors: &AppColors,
@@ -907,11 +907,10 @@ fn outpoint_cell(
         let resp = ui
             .add(
                 egui::Label::new(
-                    egui::RichText::new(text.clone())
+                    egui::RichText::new(truncate_middle(&text, 12, 10))
                         .font(egui::FontId::proportional(10.0))
                         .color(colors.text_muted),
                 )
-                .truncate()
                 .sense(egui::Sense::click()),
             )
             .on_hover_text(text.clone())
