@@ -8,8 +8,7 @@ use qpv2_core::types::{SingleSigConvention, SpxVariant};
 
 use crate::types::{label_font, WalletModal};
 use crate::ui::utils::{
-    accent_button, ghost_button, pin_popup_above_modal, section_header, v1_import_checkbox,
-    SectionCounter,
+    ghost_button, pin_popup_above_modal, section_header, v1_import_checkbox, SectionCounter,
 };
 use crate::App;
 
@@ -182,13 +181,11 @@ impl App {
         let full_w = ui.available_width();
         let btn_size = egui::vec2(full_w, 34.0);
 
-        // Platform keychain is the recommended path — the one solid
-        // solid-accent action in this modal.
         let single_sig_convention = SingleSigConvention::new(self.import_from_v1);
 
         let kc_label = format!("{} // {}", verb, keychain::short_name());
         if ui
-            .add(accent_button(&self.colors, &kc_label, btn_size))
+            .add(ghost_button(&self.colors, &kc_label, btn_size))
             .clicked()
         {
             let v = self.new_wallet_variant;
