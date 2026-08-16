@@ -230,6 +230,14 @@ pub fn delete_key(wallet_id: u32) -> Result<(), String> {
 // Binary format: [u32 LE: private_len][private bytes][public bytes]
 
 fn write_sealed_blob(path: &Path, private: &[u8], public: &[u8]) -> Result<(), String> {
+    // While a wallet is being created its directory does not exist yet:
+    // the vault only creates it when it writes the seed, which happens
+    // after the key is sealed.
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}.", parent.display(), e))?;
+    }
+
     let mut buf = Vec::with_capacity(4 + private.len() + public.len());
     buf.extend_from_slice(&(private.len() as u32).to_le_bytes());
     buf.extend_from_slice(private);

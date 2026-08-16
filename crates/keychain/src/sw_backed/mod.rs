@@ -1,3 +1,4 @@
+// This module is removable but preserved for low security tasks in the future.
 #[cfg(target_os = "linux")]
 mod linux_secret_service;
 #[cfg(target_os = "linux")]
