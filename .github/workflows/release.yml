@@ -27,9 +27,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          release_name: Release v${{ steps.get_version.outputs.version }}
           draft: false
-          prerelease: false
+          # Semver rule: a hyphen in the tag marks a pre-release, so v2.0.0-rc.5
+          # stays out of the "Latest release" slot and the /releases/latest API
+          # while a plain v2.0.0 publishes as stable.
+          prerelease: ${{ contains(github.ref, '-') }}
 
   # ── CLI binaries ──────────────────────────────────────────────────
 
