@@ -36,8 +36,8 @@ pub(crate) const QR_ADOPTION_RETRY: Duration = Duration::from_secs(300);
 use types::{
     AppColors, BalanceChartCache, BalanceResult, DaoQueryResult, DaoView, NodeStatus,
     NodeStatusUpdate, QrAdoptionUpdate, Screen, Series, Status, Tab, TransactionKind,
-    TransactionSendResult, TransactionStatus, TrezorImportUpdate,
-    TxBuildResult, TxHistoryEvent, TxRecord,
+    TransactionSendResult, TransactionStatus, TrezorImportUpdate, TxBuildResult, TxHistoryEvent,
+    TxRecord,
 };
 
 pub(crate) struct App {

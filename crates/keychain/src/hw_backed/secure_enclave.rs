@@ -19,12 +19,10 @@ fn map_err(e: security_framework::base::Error) -> String {
         -25293 => "Touch ID authentication failed.".to_string(),
         -25300 => "Keychain key not found.".to_string(),
         -25308 => "Keychain interaction not allowed.".to_string(),
-        -34018 => {
-            "Touch ID is unavailable in this build: its entitlements are not authorised \
+        -34018 => "Touch ID is unavailable in this build: its entitlements are not authorised \
              by a provisioning profile (-34018). Use an official release, or build \
              locally with --profile."
-                .to_string()
-        }
+            .to_string(),
         code => format!("Keychain error ({}): {}", code, e),
     }
 }

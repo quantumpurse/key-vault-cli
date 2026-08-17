@@ -86,8 +86,7 @@ impl ThpSession {
         client.call(0, &[]).map_err(|e| {
             log::debug!("channel allocation failed: {e}");
             TrezorSignerError::Client(
-                "no response — is the Trezor device connected and unlocked?"
-                    .to_string(),
+                "no response — is the Trezor device connected and unlocked?".to_string(),
             )
         })?;
         client.set_read_timeout(client::UNLOCK_TIMEOUT);
