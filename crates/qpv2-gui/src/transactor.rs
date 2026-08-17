@@ -677,7 +677,7 @@ impl App {
             let is_mainnet = self.qp_client.is_mainnet();
             let from_addr = crate::utils::lock_args_to_address(&lock_args, is_mainnet)
                 .map(|a| a.to_string())
-                .unwrap_or_else(|_| format!("0x{}", &lock_args));
+                .unwrap_or_else(|_| format!("0x{}", lock_args));
 
             let request = match ckb_node::build_signing_request(
                 &unsigned_tx,
