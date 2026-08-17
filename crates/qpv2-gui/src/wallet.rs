@@ -853,7 +853,7 @@ impl App {
     /// tell the user what the device is waiting for. `poll_trezor_import`
     /// picks up the result and creates the wallet. No-op while an import is
     /// already in flight.
-    pub(crate) fn create_wallet_with_trezor(&mut self, variant: SpxVariant, account_count: u32) {
+    pub(crate) fn create_trezor_watch_only_wallet(&mut self, variant: SpxVariant, account_count: u32) {
         if self.trezor_import_rx.is_some() {
             return;
         }

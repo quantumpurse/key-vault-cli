@@ -451,7 +451,7 @@ impl App {
         });
     }
 
-    /// Sign a transaction with a Trezor device and broadcast it.
+    /// Ask Trezor device to sign and broadcast it.
     ///
     /// Unlike the software paths, the device recomputes the signing message
     /// itself, so `input_cells` is unused here; instead the full previous
@@ -460,7 +460,7 @@ impl App {
     /// and signing, broadcast) runs on a worker thread so the UI stays
     /// responsive while the user confirms on the device. This handles single-sig
     /// accounts only, since the firmware cannot co-sign a multisig group.
-    pub(crate) fn sign_and_send_with_trezor(
+    pub(crate) fn delegate_trezor_sign_and_send(
         &mut self,
         kind: TransactionKind,
         unsigned_tx: ckb_types::core::TransactionView,
@@ -537,7 +537,7 @@ impl App {
             let _ = tx_send.send((kind, result));
         });
     }
-    
+
     /// Auth-mechanism-agnostic signing core. Computes the CKB tx-message
     /// hash, then branches:
     /// - **Single-sig**: signs, fills witness, and broadcasts in one shot.

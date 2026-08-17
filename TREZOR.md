@@ -125,4 +125,4 @@ cargo test -p trezor-connect --test emulator -- --ignored --nocapture
   Note for fresh clones and CI: `git submodule update --init vendor/trezor-firmware` is required before building. Do **not** use `--recursive` — the fork carries fourteen nested submodules (micropython, the STM32 HALs) that nothing here needs.
 - `ckb-node::fetch_hardware_signing_context` — supplies full previous transactions, their committed block hashes, and DAO header dependencies for the device's trustless capacity and compensation checks.
 - `qpv2-core`: `AuthMethod::Trezor`, `KeyVault::create_device_wallet` / `is_hardware_wallet` (watch-only). Device accounts use the `Standard` single-sig convention — header `[0x80, 0x01, 0x01, 0x01, flag]`, matching the firmware's `_MULTISIG_HEADER`; `TREZOR_CONVENTION` in `trezor-connect/src/device.rs` is the single source for it, passed into `create_device_wallet` so the wallet record cannot disagree with its accounts.
-- GUI: `transactor::sign_and_send_with_trezor`, `wallet::create_wallet_with_trezor`.
+- GUI: `transactor::delegate_trezor_sign_and_send`, `wallet::create_trezor_watch_only_wallet`.

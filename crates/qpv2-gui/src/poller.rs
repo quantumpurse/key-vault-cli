@@ -5,6 +5,7 @@ use crate::types::{
     TxKind,
 };
 use crate::App;
+use qpv2_core::types::AuthMethod;
 use std::sync::mpsc;
 use trezor_connect::DeviceStatus;
 
@@ -27,16 +28,18 @@ impl App {
                 self.tx_status = TransactionStatus::AwaitingSignature;
 
                 match &self.auth_method {
+                    Some(AuthMethod::Password)
+                    | Some(AuthMethod::Keychain)
+                    | Some(AuthMethod::Fido2 { .. }) => {
+                        self.sign_and_send(kind, unsigned_tx, input_cells, lock_args);
+                    }
                     Some(AuthMethod::Trezor { .. }) => {
-                        self.sign_and_send_with_trezor(kind, unsigned_tx, input_cells, lock_args);
+                        self.delegate_trezor_sign_and_send(kind, unsigned_tx, input_cells, lock_args);
                     }
                     None => {
                         tracing::error!("No authentication method set.");
                         self.tx_status =
                             TransactionStatus::Error("No authentication method set.".to_string());
-                    }
-                    _ => {
-                        self.sign_and_send(kind, unsigned_tx, input_cells, lock_args);
                     }
                 }
             }
@@ -567,7 +570,7 @@ impl App {
         }
     }
 
-    /// Pick up the accounts read from a Trezor by `create_wallet_with_trezor`
+    /// Pick up the accounts read from a Trezor by `create_trezor_watch_only_wallet`
     /// and turn them into a wallet. Runs on every screen, unlike the balance
     /// pollers: the import starts on the setup screen and is what moves us
     /// off it.
