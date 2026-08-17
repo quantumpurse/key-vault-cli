@@ -145,7 +145,8 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: recursive
+        # Top-level submodules only. Nothing here compiles against any nested one.
+        submodules: true
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -241,7 +242,8 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: recursive
+        # Top-level submodules only. Nothing here compiles against any nested one.
+        submodules: true
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -293,7 +295,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: recursive
+        # Top-level submodules only. Nothing here compiles against any nested
+        # one, and recursing pulls trezor-firmware's embedded firmware toolchain,
+        # which exceeds the 260 character path limit on Windows.
+        submodules: true
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
