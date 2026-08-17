@@ -524,7 +524,7 @@ impl App {
     /// Resolve the authentication key based on the current auth method.
     /// Synchronous: may block the egui update loop for pinentry dialogs
     /// (password/FIDO2 paths).
-    fn resolve_auth_key(&self, purpose: &str) -> Result<AuthKey, String> {
+    pub(crate) fn resolve_auth_key(&self, purpose: &str) -> Result<AuthKey, String> {
         match &self.auth_method {
             Some(AuthMethod::Password) => qpv2_core::pinentry::prompt_password(
                 &format!("Enter your wallet password to {}.", purpose),

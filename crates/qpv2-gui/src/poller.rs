@@ -24,26 +24,9 @@ impl App {
         match rx.try_recv() {
             Ok(Ok((kind, unsigned_tx, input_cells, lock_args))) => {
                 self.transaction_build_rx = None;
-
-                use qpv2_core::types::AuthMethod;
                 self.tx_status = TransactionStatus::AwaitingSignature;
+
                 match &self.auth_method {
-                    Some(AuthMethod::Password) => {
-                        self.sign_and_send_with_password(kind, unsigned_tx, input_cells, lock_args);
-                    }
-                    Some(AuthMethod::Keychain) => {
-                        self.sign_and_send_with_keychain(kind, unsigned_tx, input_cells, lock_args);
-                    }
-                    Some(AuthMethod::Fido2 { credential_id }) => {
-                        let cred_id = credential_id.clone();
-                        self.sign_and_send_with_fido2(
-                            &cred_id,
-                            kind,
-                            unsigned_tx,
-                            input_cells,
-                            lock_args,
-                        );
-                    }
                     Some(AuthMethod::Trezor { .. }) => {
                         self.sign_and_send_with_trezor(kind, unsigned_tx, input_cells, lock_args);
                     }
@@ -51,6 +34,9 @@ impl App {
                         tracing::error!("No authentication method set.");
                         self.tx_status =
                             TransactionStatus::Error("No authentication method set.".to_string());
+                    }
+                    _ => {
+                        self.sign_and_send(kind, unsigned_tx, input_cells, lock_args);
                     }
                 }
             }

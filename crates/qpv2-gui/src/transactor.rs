@@ -3,7 +3,7 @@
 use crate::types::{Status, TransactionKind, TransactionStatus};
 use crate::App;
 use ckb_node::{NodeType, QpClient};
-use qpv2_core::{types::AuthKey, KeyVault};
+use qpv2_core::KeyVault;
 use std::sync::mpsc;
 
 /// Pre-flight check before building any tx that uses the QR-lock-script
@@ -451,126 +451,6 @@ impl App {
         });
     }
 
-    /// Prompt for the wallet password and hand the resulting
-    /// `AuthKey::Password` to the sign-and-send core. Synchronous;
-    /// blocks the egui update loop while the dialog is up.
-    pub(crate) fn sign_and_send_with_password(
-        &mut self,
-        kind: crate::types::TransactionKind,
-        unsigned_tx: ckb_types::core::TransactionView,
-        input_cells: Vec<(ckb_types::packed::CellOutput, ckb_types::bytes::Bytes)>,
-        lock_args: String,
-    ) {
-        let pw = match qpv2_core::pinentry::prompt_password(
-            "Enter your wallet password to authorize this transaction.",
-            "Password:",
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("Password prompt failed: {}", e);
-                self.tx_status = TransactionStatus::Idle;
-                self.status = Status::Error(e);
-                return;
-            }
-        };
-        self.sign_and_send(
-            kind,
-            AuthKey::Password(pw),
-            unsigned_tx,
-            input_cells,
-            lock_args,
-        );
-    }
-
-    /// Retrieve the key from the platform credential store and sign.
-    pub(crate) fn sign_and_send_with_keychain(
-        &mut self,
-        kind: TransactionKind,
-        unsigned_tx: ckb_types::core::TransactionView,
-        input_cells: Vec<(ckb_types::packed::CellOutput, ckb_types::bytes::Bytes)>,
-        lock_args: String,
-    ) {
-        let key = match keychain::retrieve_key(self.wallet_id) {
-            Ok(k) => k,
-            Err(e) => {
-                tracing::error!("Keychain retrieval failed: {}", e);
-                self.tx_status = TransactionStatus::Idle;
-                self.status = Status::Error(e);
-                return;
-            }
-        };
-        self.sign_and_send(
-            kind,
-            AuthKey::CryptoKey(key),
-            unsigned_tx,
-            input_cells,
-            lock_args,
-        );
-    }
-
-    /// Retrieve the vault key from a FIDO2 device and sign.
-    pub(crate) fn sign_and_send_with_fido2(
-        &mut self,
-        credential_id: &str,
-        kind: TransactionKind,
-        unsigned_tx: ckb_types::core::TransactionView,
-        input_cells: Vec<(ckb_types::packed::CellOutput, ckb_types::bytes::Bytes)>,
-        lock_args: String,
-    ) {
-        let cred_bytes = match hex::decode(credential_id) {
-            Ok(b) => b,
-            Err(e) => {
-                let msg = format!("Invalid credential ID: {}", e);
-                tracing::error!("{}", msg);
-                self.tx_status = TransactionStatus::Idle;
-                self.status = Status::Error(msg);
-                return;
-            }
-        };
-
-        let pin = match qpv2_core::pinentry::prompt_password(
-            "Enter your FIDO2 security key PIN to sign this transaction.",
-            "PIN:",
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("FIDO2 PIN prompt failed: {}", e);
-                self.tx_status = TransactionStatus::Idle;
-                self.status = Status::Error(e);
-                return;
-            }
-        };
-
-        let hmac_output = match keychain::fido2::authenticate(&cred_bytes, &pin) {
-            Ok(h) => h,
-            Err(e) => {
-                tracing::error!("FIDO2 authentication failed: {}", e);
-                self.tx_status = TransactionStatus::Idle;
-                self.status = Status::Error(e);
-                return;
-            }
-        };
-
-        let key = match qpv2_core::utilities::derive_vault_enc_key(&hmac_output) {
-            Ok(k) => k,
-            Err(e) => {
-                let msg = format!("Key derivation failed: {}", e);
-                tracing::error!("{}", msg);
-                self.tx_status = TransactionStatus::Idle;
-                self.status = Status::Error(msg);
-                return;
-            }
-        };
-
-        self.sign_and_send(
-            kind,
-            AuthKey::CryptoKey(key),
-            unsigned_tx,
-            input_cells,
-            lock_args,
-        );
-    }
-
     /// Sign a transaction with a Trezor device and broadcast it.
     ///
     /// Unlike the software paths, the device recomputes the signing message
@@ -657,7 +537,7 @@ impl App {
             let _ = tx_send.send((kind, result));
         });
     }
-
+    
     /// Auth-mechanism-agnostic signing core. Computes the CKB tx-message
     /// hash, then branches:
     /// - **Single-sig**: signs, fills witness, and broadcasts in one shot.
@@ -667,11 +547,24 @@ impl App {
     pub(crate) fn sign_and_send(
         &mut self,
         kind: TransactionKind,
-        auth: qpv2_core::types::AuthKey,
         unsigned_tx: ckb_types::core::TransactionView,
         input_cells: Vec<(ckb_types::packed::CellOutput, ckb_types::bytes::Bytes)>,
         lock_args: String,
     ) {
+        // The caller sets AwaitingSignature before calling in, so this
+        // must return to Idle: cancelling the pinentry dialog is an
+        // ordinary outcome and would otherwise leave the UI reporting
+        // that it is still waiting for a signature.
+        let auth = match self.resolve_auth_key("sign and send the TX") {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!("{}", e);
+                self.tx_status = TransactionStatus::Idle;
+                self.status = Status::Error(e);
+                return;
+            }
+        };
+
         let account = match self.accounts.iter().find(|a| a.lock_args == lock_args) {
             Some(a) => a.clone(),
             None => {

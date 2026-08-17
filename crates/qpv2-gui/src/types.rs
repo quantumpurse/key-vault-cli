@@ -294,7 +294,7 @@ pub(crate) enum Status {
 /// Tracks the state of an in-progress transfer transaction.
 #[derive(Debug, Clone)]
 pub(crate) enum TransactionStatus {
-    /// No transfer in progress.
+    /// Nothing in progress.
     Idle,
     /// Building the unsigned transaction.
     Building,
