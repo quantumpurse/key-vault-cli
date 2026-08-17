@@ -3,15 +3,17 @@
 //! Stores and retrieves a 32-byte AES-256 encryption key using
 //! the platform's native credential store:
 //! - macOS: Data Protection Keychain with Touch ID biometric gating.
-//! - Windows: TPM + Windows Hello via Microsoft Passport KSP.
-//! - Linux: TPM seal/unseal via `tss-esapi`.
+//! - Windows: TPM seal/unseal via the Platform Crypto Provider, PIN-gated.
+//! - Linux: TPM seal/unseal via `tss-esapi`, PIN-gated.
 //!
 //! Optionally provides FIDO2 hardware key authentication via
 //! the `fido2` feature flag.
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+// Only the macOS backend namespaces its items by service and account;
+// both TPM backends locate their sealed blob by file path instead.
+#[cfg(target_os = "macos")]
 pub(crate) const SERVICE: &str = "quantumpurse";
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 pub(crate) fn account_name(wallet_id: u32) -> String {
     format!("vault-encryption-key-{}", wallet_id)
 }
@@ -29,7 +31,7 @@ pub fn display_name() -> &'static str {
     }
     #[cfg(target_os = "windows")]
     {
-        "Windows Hello (TPM)"
+        "TPM"
     }
     #[cfg(target_os = "linux")]
     {
@@ -44,7 +46,7 @@ pub fn short_name() -> &'static str {
     }
     #[cfg(target_os = "windows")]
     {
-        "Windows Hello"
+        "TPM"
     }
     #[cfg(target_os = "linux")]
     {

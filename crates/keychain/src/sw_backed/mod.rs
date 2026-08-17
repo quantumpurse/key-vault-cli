@@ -1,4 +1,5 @@
-// This module is removable but preserved for low security tasks in the future.
+/// This module is currently not used, but could be
+/// useful in some cases that require less security.
 #[cfg(target_os = "linux")]
 mod linux_secret_service;
 #[cfg(target_os = "linux")]

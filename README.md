@@ -202,18 +202,25 @@ or per-class are not disclosed. The security *properties* above are
 documented in the [Apple Platform Security Guide](https://support.apple.com/guide/security/welcome/web);
 the internal cryptographic construction is not.
 
-##### 2. Windows — TPM + Windows Hello (Microsoft Passport KSP)
+##### 2. Windows — TPM seal via the Platform Crypto Provider
 
-An RSA-2048 key pair is created inside the TPM via the Microsoft
-Passport Key Storage Provider. The 32-byte vault encryption key is
-encrypted with `NCryptEncrypt` (RSA-OAEP SHA-256) and the ~256-byte
-ciphertext is stored to `wrapped_key.bin` on disk. On unlock,
-`NCryptDecrypt` triggers a Windows Hello biometric/PIN prompt before
-the TPM releases the private key. The RSA private key never leaves
-the TPM.
+The 32-byte vault encryption key is sealed under the TPM using the
+Platform Crypto Provider's well-known seal key
+(`TPM_RSA_SRK_SEAL_KEY`), via `NCryptEncrypt` with
+`NCRYPT_SEALING_FLAG`. A user-chosen PIN becomes the sealed object's
+authorization value, passed as the seal password, and the opaque blob
+is stored to `pcp_sealed_blob.bin` on disk. On unlock the PIN is
+supplied again and `NCryptDecrypt` returns the 32 bytes. The sealed
+blob is useless on another machine.
 
-The previous DPAPI Credential Manager implementation is preserved in
-`sw_backed/windows_dpapi.rs` for reference.
+The PIN is not sent verbatim: a TPM authorization value is capped at
+the name algorithm's digest size (32 bytes under SHA-256), so the PIN
+is expanded through HKDF-SHA256 to exactly that length. This removes
+any length limit on the PIN itself and makes the value independent of
+character encoding.
+
+This is the same construction as the Linux path below, and the same
+family of operation BitLocker uses for its volume master key.
 
 ##### 3. Linux — TPM seal via `tss-esapi`
 
@@ -240,28 +247,28 @@ The previous Secret Service D-Bus implementation is preserved in
 
 ##### 4. Platform comparison
 
-| Scenario | Plain file | DPAPI / Secret Service | Apple Keychain + Touch ID | TPM + Windows Hello | TPM seal | FIDO2 Hardware Key |
+| Scenario | Plain file | DPAPI / Secret Service | Apple Keychain + Touch ID | TPM seal (Windows) | TPM seal (Linux) | FIDO2 Hardware Key |
 |---|---|---|---|---|---|---|
-| Malware running as user | Reads key freely | Reads key freely | Blocked — Secure Enclave requires Touch ID per access | Blocked — requires biometric/PIN prompt per access | Blocked — TPM requires authorization policy | Blocked — requires physical device + PIN + tap |
-| Another user on same machine | Can read if file permissions allow | Cannot decrypt (tied to user session) | Cannot access (Keychain bound to user + biometric) | Cannot access (TPM key bound to user + biometric) | Cannot access (TPM sealed to user session) | Cannot access — no device, no PIN |
-| Stolen disk, booted from USB | Reads key in plaintext | Cannot decrypt without user's login password | Cannot decrypt — key sealed in Secure Enclave hardware | Cannot decrypt — key sealed inside TPM hardware | Cannot decrypt — sealed blob useless without TPM | Cannot decrypt — credential_id blob useless without device |
-| Admin with Mimikatz while user logged in | Reads key freely | Can extract DPAPI master key from memory | Key never leaves Secure Enclave in plaintext | Key never leaves TPM in plaintext — nothing to extract | Key never leaves TPM in plaintext | Key never leaves FIDO2 device — HMAC computed on-chip |
-| Remote attacker with shell as user | Reads key freely | Reads key freely | Blocked — no physical presence for Touch ID | Blocked — no physical presence for biometric prompt | Can unseal if process reaches `/dev/tpmrm0` | Blocked — no physical device to tap |
+| Malware running as user | Reads key freely | Reads key freely | Blocked — Secure Enclave requires Touch ID per access | Blocked — requires the PIN per access | Blocked — TPM requires authorization policy | Blocked — requires physical device + PIN + tap |
+| Another user on same machine | Can read if file permissions allow | Cannot decrypt (tied to user session) | Cannot access (Keychain bound to user + biometric) | Cannot access without the PIN (seal is machine-bound, not user-bound) | Cannot access (TPM sealed to user session) | Cannot access — no device, no PIN |
+| Stolen disk, booted from USB | Reads key in plaintext | Cannot decrypt without user's login password | Cannot decrypt — key sealed in Secure Enclave hardware | Cannot decrypt — sealed blob useless without this TPM | Cannot decrypt — sealed blob useless without TPM | Cannot decrypt — credential_id blob useless without device |
+| Admin with Mimikatz while user logged in | Reads key freely | Can extract DPAPI master key from memory | Key never leaves Secure Enclave in plaintext | Key never leaves the TPM in plaintext — nothing to extract | Key never leaves TPM in plaintext | Key never leaves FIDO2 device — HMAC computed on-chip |
+| Remote attacker with shell as user | Reads key freely | Reads key freely | Blocked — no physical presence for Touch ID | Blocked — needs the PIN | Can unseal if process reaches `/dev/tpmrm0` | Blocked — no physical device to tap |
 
 The DPAPI (Windows) and Secret Service (Linux) implementations are
 preserved for reference. Both are replaced by hardware-backed options:
-TPM + Windows Hello on Windows and TPM seal on Linux.
+TPM seal on both Windows and Linux.
 
 ##### 5. Hardware-backed authentication architecture
 
 All hardware-backed methods share the same core pattern: an opaque
 hardware operation gated by authentication produces or releases a key.
 
-| | FIDO2 (hmac-secret) | TPM + Windows Hello | TPM seal (Linux) | Apple Secure Enclave |
+| | FIDO2 (hmac-secret) | TPM seal (Windows) | TPM seal (Linux) | Apple Secure Enclave |
 |---|---|---|---|---|
-| Hardware holds | wrapping_key (permanent, fused) | RSA private key (persistent in TPM) | SRK (deterministic from well-known template) | Per-item key wrapped by class key derived from hardware UID |
-| Client stores on disk | credential_id = Encrypt(wrapping_key, CredRandom) | wrapped_key.bin = Encrypt(RSA_pub, AES_key) | tpm_sealed_blob.bin (Private + Public) | Keychain item (encrypted by per-item key) |
-| On use | Device decrypts blob → HMAC(CredRandom, salt) → returns derived key | TPM decrypts blob → returns original key | TPM loads sealed blob → TPM2_Unseal → returns key | Secure Enclave unwraps per-item key → decrypts → returns key |
-| Authentication gate | PIN (verified on-device, 8 retries) | Windows Hello biometric/PIN | TPM authorization policy | Touch ID (biometric match in Secure Enclave) |
+| Hardware holds | wrapping_key (permanent, fused) | SRK, via the provider's well-known seal key | SRK (deterministic from well-known template) | Per-item key wrapped by class key derived from hardware UID |
+| Client stores on disk | credential_id = Encrypt(wrapping_key, CredRandom) | pcp_sealed_blob.bin (opaque sealed object) | tpm_sealed_blob.bin (Private + Public) | Keychain item (encrypted by per-item key) |
+| On use | Device decrypts blob → HMAC(CredRandom, salt) → returns derived key | TPM unseals blob → returns original key | TPM loads sealed blob → TPM2_Unseal → returns key | Secure Enclave unwraps per-item key → decrypts → returns key |
+| Authentication gate | PIN (verified on-device, 8 retries) | PIN (TPM authorization value, HKDF-expanded to 32 bytes) | TPM authorization policy | Touch ID (biometric match in Secure Enclave) |
 | Secret origin | Generated inside the device (CredRandom) | Generated on the client | Generated on the client | Generated on the client |
 | Key leaves hardware? | Never — only HMAC derivative returned | Only during unseal operation | Only during unseal operation | Only during decrypt operation |

@@ -7,18 +7,29 @@
 //!
 //! Exercises the same store/retrieve/delete path wallet creation uses,
 //! without touching a real wallet: it uses wallet id `u32::MAX` and can
-//! clean up everything it created.
+//! clean up everything it created. Each step prompts for the PIN through
+//! pinentry, exactly as a real unlock does.
 //!
-//!     cargo run -p keychain --example windows_hello_probe
+//!     cargo run -p keychain --example windows_tpm_probe
 //!
-//! The whole round trip in one process cannot tell you whether unlocking
-//! really demands a gesture, because the gesture taken while the key was
-//! created may still be cached. Split it across two processes to see
-//! what a user actually gets when unlocking a wallet later:
+//! Splitting it across two processes additionally proves the sealed blob
+//! survives on disk and reopens in a fresh process — the thing a user
+//! actually depends on when unlocking a wallet the next day:
 //!
-//!     cargo run -p keychain --example windows_hello_probe -- store
-//!     cargo run -p keychain --example windows_hello_probe -- retrieve
-//!     cargo run -p keychain --example windows_hello_probe -- clean
+//!     cargo run -p keychain --example windows_tpm_probe -- store
+//!     cargo run -p keychain --example windows_tpm_probe -- retrieve
+//!     cargo run -p keychain --example windows_tpm_probe -- clean
+//!
+//! **Always finish with `-- clean`.** Between `store` and `clean` a wallet
+//! directory named `4294967295` exists, and leaving it there breaks new
+//! wallet creation — see `refuse_if_present` below.
+//!
+//! Note this probe cannot tell you whether the provider is performing
+//! genuine TPM sealing rather than an RSA wrap — that question is settled
+//! by the `seal_is_not_rsa` test in `windows_tpm.rs`, and the whole
+//! post-quantum claim rests on it. Run that too:
+//!
+//!     cargo test -p keychain --lib -- --ignored --nocapture
 
 #[cfg(target_os = "windows")]
 const WALLET_ID: u32 = u32::MAX;
@@ -28,8 +39,8 @@ const WALLET_ID: u32 = u32::MAX;
 #[cfg(not(target_os = "windows"))]
 fn main() {
     eprintln!(
-        "REFUSED: windows_hello_probe runs on Windows only; this is {}. \
-         Here it would exercise {}, not Windows Hello.",
+        "REFUSED: windows_tpm_probe runs on Windows only; this is {}. \
+         Here it would exercise {}, not the Windows TPM.",
         std::env::consts::OS,
         keychain::display_name()
     );
@@ -59,7 +70,6 @@ fn main() {
         }
         None => {
             store(&secret);
-            store(&secret); // Second call re-uses the key instead of creating it.
             retrieve(&secret);
             cleanup();
             println!("\n{} works.", keychain::display_name());
@@ -67,9 +77,32 @@ fn main() {
     }
 }
 
+/// Refuses to run if the throwaway wallet directory is already present.
+///
+/// `u32::MAX` is not a reserved id — it is an ordinary wallet directory
+/// name, and `next_wallet_id()` computes `max + 1` (`db/wallets.rs:56`).
+/// Leaving one behind therefore overflows the allocator: a panic in debug,
+/// and in release a wrap to 0 that collides with the first real wallet.
+/// Refusing here means the only way to reach that state is to skip
+/// `-- clean`, which every message below insists on.
+#[cfg(target_os = "windows")]
+fn refuse_if_present() {
+    if let Ok(dir) = qpv2_core::db::get_wallet_dir(WALLET_ID) {
+        if dir.exists() {
+            eprintln!(
+                "REFUSED: {} already exists. Run `-- clean` first — leaving it \
+                 in place breaks wallet id allocation.",
+                dir.display()
+            );
+            std::process::exit(2);
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn store(secret: &[u8]) {
-    println!("store_key (creates the TPM key on first run, may prompt)...");
+    refuse_if_present();
+    println!("store_key (seals to the TPM; asks you to set a PIN)...");
     if let Err(e) = keychain::store_key(WALLET_ID, secret) {
         eprintln!("      FAILED: {}", e);
         cleanup();
@@ -80,19 +113,11 @@ fn store(secret: &[u8]) {
 
 #[cfg(target_os = "windows")]
 fn retrieve(secret: &[u8]) {
-    println!("retrieve_key (Windows Hello prompt expected)...");
-    let started = std::time::Instant::now();
+    println!("retrieve_key (unseals; asks for the same PIN)...");
     match keychain::retrieve_key(WALLET_ID) {
-        Ok(got) if got.as_ref() == secret => {
-            // A gesture cannot be answered in a few milliseconds, so the
-            // elapsed time says whether a human was really in the loop.
-            println!(
-                "      ok — round-trip matches, took {:?}",
-                started.elapsed()
-            );
-        }
+        Ok(got) if got.as_ref() == secret => println!("      ok — round-trip matches"),
         Ok(_) => {
-            eprintln!("      FAILED: decrypted bytes differ from what was stored");
+            eprintln!("      FAILED: unsealed bytes differ from what was stored");
             cleanup();
             std::process::exit(1);
         }

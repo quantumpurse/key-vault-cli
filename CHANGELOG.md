@@ -15,7 +15,7 @@ First major release. Adds the GUI and expands the CLI with multi-wallet support,
 - NervosDAO support: deposit, request withdrawal, and withdraw with interest estimation and APC display.
 - Choose between Public RPC, Light Client, or Full Node backends. Switch between Mainnet and Testnet. Settings persist across sessions.
 - Manage multiple wallets: create, rename, delete, switch, import/export mnemonic.
-- Unlock with Touch ID (macOS), Windows Hello, TPM PIN (Linux), or FIDO2 hardware key.
+- Unlock with Touch ID (macOS), TPM PIN (Windows and Linux), or FIDO2 hardware key.
 - Password and mnemonic entry handled in a separate secure process.
 
 ### Added — CLI

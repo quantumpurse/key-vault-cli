@@ -25,7 +25,7 @@ enum Commands {
         /// SPHINCS+ variant (Sha2128F, Sha2128S, Sha2192F, Sha2192S, Sha2256F, Sha2256S, Shake128F, Shake128S, Shake192F, Shake192S, Shake256F, Shake256S)
         #[arg(short, long)]
         variant: String,
-        /// Use platform credential store (Touch ID on macOS, Windows Hello + TPM on Windows, TPM on Linux)
+        /// Use platform credential store (Touch ID on macOS, TPM + PIN on Windows and Linux)
         #[arg(long)]
         keychain: bool,
         /// Use a FIDO2 security key with hmac-secret extension
@@ -133,7 +133,7 @@ enum MnemonicCommands {
         #[arg(short, long)]
         seed_file: Option<String>,
 
-        /// Use platform credential store (Touch ID on macOS, Windows Hello + TPM on Windows, TPM on Linux)
+        /// Use platform credential store (Touch ID on macOS, TPM + PIN on Windows and Linux)
         #[arg(long)]
         keychain: bool,
 
