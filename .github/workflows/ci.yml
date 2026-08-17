@@ -83,7 +83,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libtss2-dev libudev-dev
 
     - name: Check formatting
-      run: cargo fmt --all -- --check
+      run: cargo fmt --check
 
     - name: Run clippy
       run: cargo clippy --workspace --all-targets -- -D warnings
