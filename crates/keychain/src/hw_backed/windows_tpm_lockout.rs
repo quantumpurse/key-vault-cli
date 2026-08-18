@@ -85,8 +85,8 @@ impl LockoutState {
 ///
 /// Zero is deliberately not special-cased into something like "immediately".
 /// An interval of zero does not describe a short wait, so rendering it as a
-/// duration risks telling the user the opposite of the truth;
-/// [`heal_rate_sentence`] drops the claim instead.
+/// duration risks telling the user the opposite of the truth; the sentence
+/// builders below drop the claim instead.
 pub(super) fn format_interval(seconds: u32) -> String {
     fn plural(n: u32, unit: &str) -> String {
         format!("{n} {unit}{}", if n == 1 { "" } else { "s" })
@@ -105,22 +105,56 @@ pub(super) fn format_interval(seconds: u32) -> String {
     }
 }
 
-/// Renders the healing rate as a sentence ready to append to a message, or an
-/// empty string when the chip reports an interval that cannot be described.
+/// Renders the wait a locked-out user faces, as sentences ready to append to
+/// a message, or an empty string when the chip reports no usable interval.
 ///
-/// The whole sentence is built here rather than interpolating
-/// [`format_interval`] at each call site, so that only one place has to know
-/// which intervals can legibly follow the word "every". Windows-managed chips
-/// report intervals of hours, but the dictionary-attack parameters are chip
-/// state an administrator can set, so the awkward values are reachable.
-pub(super) fn heal_rate_sentence(seconds: u32) -> String {
-    if seconds == 0 {
+/// Two horizons: the next attempt comes back after one interval, and the
+/// whole recorded-failure count clears after `counter` of them. Both are
+/// stated as upper bounds because the chip does not report how much of the
+/// current interval has already elapsed. The power caveat is the
+/// specification's: the counter decrements only when *"there is no power
+/// interruption"*.
+pub(super) fn wait_sentence(state: &LockoutState) -> String {
+    if state.interval == 0 {
         return String::new();
     }
-    format!(
-        " It forgives one failed attempt every {}.",
-        format_interval(seconds)
-    )
+    let next = format_interval(state.interval);
+    if state.counter > 1 {
+        format!(
+            " Try again in up to {next}; all {} recorded failures clear in up \
+             to {}. The wait counts down only while the computer is powered \
+             on.",
+            state.counter,
+            format_interval(state.counter.saturating_mul(state.interval)),
+        )
+    } else {
+        format!(
+            " Try again in up to {next}. The wait counts down only while the \
+             computer is powered on."
+        )
+    }
+}
+
+/// Renders what the chip has recorded after a failed authorization — never a
+/// count of attempts remaining. A countdown against `TPM_PT_MAX_AUTH_FAIL`
+/// promised 28 attempts on hardware that locked out on the next try, so the
+/// chip's advertised threshold is not the binding limit and no remaining
+/// count is knowable.
+pub(super) fn recorded_failures_sentence(state: &LockoutState) -> String {
+    let mut sentence = format!(
+        " The TPM has now recorded {} failed attempt{}; repeated failures \
+         lock it out.",
+        state.counter,
+        if state.counter == 1 { "" } else { "s" },
+    );
+    if state.interval > 0 {
+        sentence.push_str(&format!(
+            " It forgives one failed attempt every {}, counting only while \
+             the computer is powered on.",
+            format_interval(state.interval),
+        ));
+    }
+    sentence
 }
 
 /// Reads the lockout properties, or `None` if the TPM cannot be reached.
@@ -391,19 +425,62 @@ mod tests {
         assert_eq!(format_interval(7500), "2 hours 5 minutes");
     }
 
-    /// Every non-empty heal rate has to read correctly after the preceding
-    /// sentence, which is what makes the zero case an omission rather than a
-    /// phrase.
+    /// Every non-empty sentence has to read correctly appended to the
+    /// preceding one, which is what makes the zero-interval case an omission
+    /// rather than a phrase.
     #[test]
-    fn heal_rate_reads_as_a_sentence() {
-        assert_eq!(heal_rate_sentence(0), "");
+    fn wait_reads_as_sentences() {
+        let locked = LockoutState {
+            counter: 5,
+            max_auth_fail: 32,
+            interval: 7200,
+        };
         assert_eq!(
-            heal_rate_sentence(30),
-            " It forgives one failed attempt every 30 seconds."
+            wait_sentence(&locked),
+            " Try again in up to 2 hours; all 5 recorded failures clear in up \
+             to 10 hours. The wait counts down only while the computer is \
+             powered on."
         );
+        let single = LockoutState {
+            counter: 1,
+            max_auth_fail: 32,
+            interval: 7200,
+        };
         assert_eq!(
-            heal_rate_sentence(7200),
-            " It forgives one failed attempt every 2 hours."
+            wait_sentence(&single),
+            " Try again in up to 2 hours. The wait counts down only while the \
+             computer is powered on."
+        );
+        let no_interval = LockoutState {
+            counter: 5,
+            max_auth_fail: 32,
+            interval: 0,
+        };
+        assert_eq!(wait_sentence(&no_interval), "");
+    }
+
+    #[test]
+    fn recorded_failures_read_as_a_sentence() {
+        let state = LockoutState {
+            counter: 3,
+            max_auth_fail: 32,
+            interval: 7200,
+        };
+        assert_eq!(
+            recorded_failures_sentence(&state),
+            " The TPM has now recorded 3 failed attempts; repeated failures \
+             lock it out. It forgives one failed attempt every 2 hours, \
+             counting only while the computer is powered on."
+        );
+        let one = LockoutState {
+            counter: 1,
+            max_auth_fail: 32,
+            interval: 0,
+        };
+        assert_eq!(
+            recorded_failures_sentence(&one),
+            " The TPM has now recorded 1 failed attempt; repeated failures \
+             lock it out."
         );
     }
 }

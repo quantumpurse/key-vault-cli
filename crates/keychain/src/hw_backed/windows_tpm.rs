@@ -6,145 +6,6 @@
 //! directory. A PIN is required to seal and to unseal, supplied as the
 //! seal password. This mirrors [`linux_tpm`](super::linux_tpm), which
 //! seals through `tss-esapi`.
-//!
-//! # Established facts
-//!
-//! Each of these is documented by a primary source.
-//!
-//! - **Sealing is a TPM operation Windows uses in production.** Microsoft:
-//!   *"The TPM can also seal and unseal data that is generated outside the
-//!   TPM. With sealed key and software, such as BitLocker Drive
-//!   Encryption, data can be locked until specific hardware or software
-//!   conditions are met."* For BitLocker specifically: *"when Windows
-//!   seals the BitLocker key to the TPM, it does it with a PCR 11 value
-//!   of 0."*
-//!   ([TPM fundamentals], [BitLocker countermeasures])
-//!
-//! - **How TPM 2.0 protects a sealed object.** The symmetric key and IV
-//!   come from `KDFa(hashAlg, seed, "STORAGE", Name, NULL, bits)`, where
-//!   `seed` is *"the symmetric seed value in the sensitive area of the
-//!   object's parent"* and `Name` identifies the object being encrypted —
-//!   so the key is per-object, not per-parent. Integrity is
-//!   `HMACnameAlg(HMACkey, encSensitive || Name)` under a separately
-//!   derived key, i.e. encrypt-then-MAC. The mode is CFB, and the IV is
-//!   generated per operation from the TPM's RNG.
-//!   ([`Object_spt.c`] — `ComputeProtectionKeyParms`,
-//!   `ComputeOuterIntegrity`, `ProduceOuterWrap`)
-//!
-//! - **A TPM authorization value is digest-sized.** `TPM2B_AUTH` is a
-//!   typedef of `TPM2B_DIGEST`, *"size limited to the same as the digest
-//!   structure"* — 32 bytes under SHA-256. This is why [`SealAuth`] runs
-//!   the PIN through HKDF instead of passing its bytes directly.
-//!   ([`tss2_tpm2_types.h`])
-//!
-//! - **The previous design put an RSA ciphertext of this key on disk.**
-//!   It created an RSA-2048 key through the Microsoft Passport KSP and
-//!   encrypted the vault key with its public half. That is recoverable by
-//!   factoring the modulus, offline, from a copied file — with no device,
-//!   no gesture and no user involvement. It was the only classically
-//!   breakable primitive guarding data at rest in this wallet. See the
-//!   deletion of `windows_hello.rs` for the code it replaced.
-//!
-//! - **What dictionary-attack lockout blocks, and what it does not.** In
-//!   lockout the TPM returns `TPM_RC_LOCKOUT` *"for an operation that
-//!   requires use of a DA protected authValue"*, and an object's authValue is
-//!   DA-protected *"unless the object's noDA attribute is SET"* — with `noDA`
-//!   SET, *"authorization of the object is not blocked if the TPM is in
-//!   lockout"*. The counter is held in NV, and its self-healing decrement
-//!   happens only if *"there is no power interruption"*; a non-orderly
-//!   shutdown instead increments it by one. So the counter survives reboots,
-//!   and a hard power loss costs an attempt rather than saving one.
-//!   ([Part 1] 19.8.1-19.8.6, [Part 2] 8.3.3.8)
-//!
-//! - **The old design's gate was not enforced by the chip.** It relied on
-//!   the `NgcCacheType` property in Windows' NGC layer, with no TPM
-//!   authorization value on the key. Microsoft: *"TPM 2.0 allows some
-//!   keys to be created without an authorization value associated with
-//!   them. These keys can be used when the TPM is locked."* The PIN here
-//!   is an authorization value, so it is checked by the TPM itself.
-//!   ([TPM fundamentals])
-//!
-//! # Observed on hardware
-//!
-//! Reproduced on a TPM 2.0 machine. Recorded here rather than above because
-//! no primary source accounts for it.
-//!
-//! - **Repeated wrong PINs lock the chip, and the lockout blocks sealing as
-//!   well as unsealing.** A wrong PIN makes `NCryptDecrypt` return
-//!   `NTE_PERM`; past the chip's threshold `NCryptEncrypt` fails at its very
-//!   first call with `TPM_20_E_LOCKOUT` (`0x80280921`). A user in that state
-//!   can neither open an existing wallet nor create a new one.
-//!
-//!   The specification does not require the second half of this.
-//!   `TPM2_Create` authorizes only the parent ([Part 3] Table 19), so sealing
-//!   is blocked only if the parent SRK has `noDA` CLEAR, or if the provider
-//!   authorizes through a session bound to a DA-protected entity, which
-//!   carries lockout with it ([Part 1] 19.8.7). TCG's guidance is that a
-//!   shared SRK should *"set the noDA bit"*, which would leave sealing
-//!   working ([Provisioning] 7.5.1, Table 1). Microsoft publishes neither its
-//!   SRK template nor the PCP command sequence, so which case applies here is
-//!   unknown.
-//!
-//! # Assumptions this module has not verified
-//!
-//! The post-quantum property claimed above holds **only if** the first
-//! item below is true. Until [`tests::seal_is_not_rsa`] passes on real
-//! hardware, treat it as an open question rather than a result.
-//!
-//! - **That the PCP seal key performs TPM sealing at all.** Microsoft
-//!   documents neither the operation nor the blob format. The inference
-//!   rests on a reported 128-byte input cap, which matches a TPM sealed
-//!   object and no RSA padding — but the only public source for that cap
-//!   is a third-party writeup, not Microsoft.
-//!
-//! - **That `NCRYPT_SEALING_FLAG` is the correct flag.** It is not
-//!   documented for this use. It is inferred from the existence of the
-//!   `NCRYPTBUFFER_TPM_SEAL_*` parameter family, which has no other
-//!   consumer.
-//!
-//! - **Which AES key size protects the blob.** That comes from
-//!   Microsoft's SRK template, which is unpublished. The standard TPM 2.0
-//!   SRK template specifies AES-128-CFB, so that is the likely answer.
-//!   Reading it requires `TPM2_ReadPublic` against the SRK handle.
-//!
-//! # Consequences worth knowing
-//!
-//! Windows Hello is gone from this path. Hello lives in the Passport/NGC
-//! provider, which creates asymmetric keys; sealing lives in the Platform
-//! Crypto Provider below it. The gate is therefore a PIN collected
-//! through pinentry, as on Linux, not a biometric prompt drawn by
-//! Windows.
-//!
-//! The seal key is shared, not per-wallet: separation comes from the blob
-//! path and the PIN. Moving one wallet's blob into another's directory and
-//! supplying the matching PIN will unseal it; the mismatch is caught one
-//! layer up when the key fails to authenticate that wallet's seed.
-//! [`linux_tpm`](super::linux_tpm) has the same property.
-//!
-//! The parent is itself an RSA key — hence the constant's name, and
-//! `linux_tpm` builds an RSA-2048 SRK too. That key is the parent's
-//! identity; per the derivation above it is not what protects the blob,
-//! and factoring it would not yield the sealed contents.
-//!
-//! The lockout counter belongs to the chip, not to this wallet, and is
-//! shared with every other consumer of DA-protected objects on the machine.
-//! `NCRYPTBUFFER_TPM_SEAL_NO_DA_PROTECTION` is not used, for two independent
-//! reasons. It would remove DA protection from the sealed object, and that
-//! rate limiting is what makes a short PIN safe against exhaustive search.
-//! It also would not restore sealing during a lockout even if that were
-//! wanted, because `noDA` on the child says nothing about the parent whose
-//! authorization `TPM2_Create` actually requires. What the lockout costs the
-//! user is reported by [`windows_tpm_lockout`](super::windows_tpm_lockout)
-//! instead.
-//!
-//! [Part 1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part1_Architecture_pub.pdf
-//! [Part 2]: https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part2_Structures_pub.pdf
-//! [Part 3]: https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part3_Commands_pub.pdf
-//! [Provisioning]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
-//! [TPM fundamentals]: https://learn.microsoft.com/en-us/windows/security/hardware-security/tpm/tpm-fundamentals
-//! [BitLocker countermeasures]: https://learn.microsoft.com/en-us/windows/security/operating-system-security/data-protection/bitlocker/countermeasures
-//! [`Object_spt.c`]: https://github.com/microsoft/ms-tpm-20-ref/blob/main/TPMCmd/tpm/src/command/Object/Object_spt.c
-//! [`tss2_tpm2_types.h`]: https://github.com/tpm2-software/tpm2-tss/blob/master/include/tss2/tss2_tpm2_types.h
 
 use super::windows_tpm_lockout as lockout;
 use crate::KEY_LEN;
@@ -153,7 +14,7 @@ use std::path::PathBuf;
 use std::ptr;
 use windows_sys::Win32::Foundation::{
     NTE_BAD_DATA, NTE_PERM, TPM_20_E_AUTH_FAIL, TPM_20_E_LOCKOUT, TPM_E_AUTHFAIL,
-    TPM_E_DEFEND_LOCK_RUNNING, TPM_E_LOCKED_OUT,
+    TPM_E_DEFEND_LOCK_RUNNING, TPM_E_LOCKED_OUT, TPM_E_NOTSEALED_BLOB,
 };
 use windows_sys::Win32::Security::Cryptography::{
     BCryptBuffer, BCryptBufferDesc, NCryptDecrypt, NCryptEncrypt, NCryptFreeObject, NCryptOpenKey,
@@ -242,18 +103,11 @@ const LOCKED_OUT: &[i32] = &[
 /// is the only route. `Clear-Tpm` is deliberately never suggested: it would
 /// destroy every sealed blob on the machine, including this wallet's.
 fn locked_out_message(state: Option<lockout::LockoutState>) -> String {
-    let mut message = String::from(
-        "The TPM is locked out after too many wrong PINs. It will not unseal or \
-         seal, so existing wallets cannot be opened and new ones cannot be created.",
-    );
+    let mut message = String::from("The TPM is locked out after too many wrong PINs.");
     if let Some(state) = state {
-        message.push_str(&lockout::heal_rate_sentence(state.interval));
+        message.push_str(&lockout::wait_sentence(&state));
     }
-    message.push_str(
-        " If the TPM owner authorization is available, `Unblock-Tpm` in an \
-         elevated PowerShell clears the lockout now; otherwise it has to be \
-         waited out.",
-    );
+    message.push_str("`Unblock-Tpm` in an elevated PowerShell clears the lockout now.");
     message
 }
 
@@ -270,24 +124,40 @@ fn unseal_error(status: i32) -> String {
     if AUTH_FAILED.contains(&status) {
         let mut message = String::from("Wrong PIN.");
         if let Some(state) = lockout::read() {
-            match state.attempts_remaining() {
-                // The failure that produced this status was the one that
-                // exhausted the allowance, so describe the lockout it caused
-                // rather than promising another try.
-                Some(0) => return locked_out_message(Some(state)),
-                Some(remaining) => message.push_str(&format!(
-                    " {} attempt{} remaining before the TPM locks out.{}",
-                    remaining,
-                    if remaining == 1 { "" } else { "s" },
-                    lockout::heal_rate_sentence(state.interval),
-                )),
-                None => {}
+            // The failure that produced this status may have been the one
+            // that exhausted the allowance, so describe the lockout it
+            // caused rather than promising another try.
+            if state.attempts_remaining() == Some(0) {
+                return locked_out_message(Some(state));
             }
+            message.push_str(&lockout::recorded_failures_sentence(&state));
         }
         // `NTE_PERM` is NCrypt's generic access-denied, and a wrong PIN is only
         // the meaning observed for it here. Keeping the code means a denial
         // this module has mis-attributed is still reportable, rather than
         // being presented to the user as a confident wrong answer.
+        message.push_str(&format!(" ({})", status_to_err(status, "unseal")));
+        return message;
+    }
+
+    if status == TPM_E_NOTSEALED_BLOB {
+        // Documented as a corrupt or foreign blob, but observed on hardware
+        // as the persistent unseal failure after repeated wrong PINs — it
+        // keeps appearing even once the correct PIN is supplied, and clears
+        // when the lockout does.
+        let mut message = String::from(
+            "The TPM refused the sealed blob. After repeated wrong PINs this \
+             is the shape a lockout takes, and waiting it out restores \
+             access.",
+        );
+        if let Some(state) = lockout::read() {
+            message.push_str(&lockout::wait_sentence(&state));
+        }
+        message.push_str(
+            " If it appears without any wrong PINs, the blob is corrupt or \
+             from another machine, and only a seed-phrase restore recovers \
+             the wallet.",
+        );
         message.push_str(&format!(" ({})", status_to_err(status, "unseal")));
         return message;
     }
@@ -346,7 +216,8 @@ fn open_provider() -> Result<ProvHandle, String> {
         return Err(status_to_err(
             status,
             "Failed to open Microsoft Platform Crypto Provider. \
-             Ensure this machine has a TPM 2.0 and it is enabled in firmware",
+             Ensure this machine has a TPM 2.0 and that it is enabled in the \
+             BIOS/UEFI settings",
         ));
     }
     Ok(ProvHandle(hprov))
