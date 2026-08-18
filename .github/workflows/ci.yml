@@ -29,6 +29,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
+        components: clippy
 
     - name: Cache cargo registry
       uses: actions/cache@v4
@@ -58,14 +59,18 @@ jobs:
       if: runner.os == 'Linux'
       run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libtss2-dev libudev-dev
 
+    - name: Run clippy
+      run: cargo clippy --workspace --all-targets -- -D warnings
+
     - name: Run tests
       run: cargo test --workspace --verbose
 
     - name: Build workspace release
       run: cargo build --workspace --release --verbose
 
-  lint:
-    name: Lint and Format Check
+  # One platform is enough here, unlike clippy
+  format:
+    name: Format Check
     runs-on: ubuntu-latest
 
     steps:
@@ -77,16 +82,10 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
-        components: rustfmt, clippy
-
-    - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libtss2-dev libudev-dev
+        components: rustfmt
 
     - name: Check formatting
       run: cargo fmt --check
-
-    - name: Run clippy
-      run: cargo clippy --workspace --all-targets -- -D warnings
 
   security:
     name: Security Audit
