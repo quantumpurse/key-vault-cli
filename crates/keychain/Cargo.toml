@@ -19,7 +19,13 @@ zeroize = { version = "1.8.2", optional = true }
 security-framework = { version = "3", features = ["OSX_10_13", "OSX_10_15"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+windows-sys = { version = "0.61", features = [
+	"Win32_Foundation",
+	"Win32_Security_Cryptography",
+	# Reading the TPM's dictionary-attack counters means going below NCrypt,
+	# which does not expose them. See hw_backed::windows_tpm_lockout.
+	"Win32_System_TpmBaseServices",
+] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tss-esapi = "7"
