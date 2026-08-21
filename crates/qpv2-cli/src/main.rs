@@ -4,7 +4,7 @@ use qpv2_core::KeyVault;
 use qpv2_core::SecureString;
 use rpassword::read_password;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 #[derive(Parser)]
 #[command(name = "qpv2")]
@@ -384,7 +384,17 @@ fn parse_variant(variant_str: &str) -> Result<SpxVariant, String> {
 fn prompt_for_input(prompt: &str) -> Result<SecureString, String> {
     print!("{}", prompt);
     io::stdout().flush().map_err(|e| e.to_string())?;
-    let input = read_password().map_err(|e| e.to_string())?;
+
+    let input = if io::stdin().is_terminal() {
+        read_password().map_err(|e| e.to_string())?
+    } else {
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| e.to_string())?;
+        input.trim_end_matches(['\r', '\n']).to_string()
+    };
+
     let result = SecureString::from_utf8(input.into_bytes())?;
     Ok(result)
 }

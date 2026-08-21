@@ -22,6 +22,42 @@ ARCH="$(uname -m)"
 BUILD_DIR="$SCRIPT_DIR/pinentry-build/${OS}-${ARCH}"
 DEPS_PREFIX="$BUILD_DIR/deps"
 
+if [ "$OS" = "Darwin" ]; then
+	for opt in gettext autoconf automake libtool; do
+		if [ -d "/opt/homebrew/opt/$opt/bin" ]; then
+			export PATH="/opt/homebrew/opt/$opt/bin:$PATH"
+		fi
+		if [ -d "/usr/local/opt/$opt/bin" ]; then
+			export PATH="/usr/local/opt/$opt/bin:$PATH"
+		fi
+	done
+fi
+
+missing_tools=()
+for tool in autoconf automake gettext make; do
+	if ! command -v "$tool" >/dev/null 2>&1; then
+		missing_tools+=("$tool")
+	fi
+done
+
+if [ "$OS" = "Darwin" ] && ! command -v ibtool >/dev/null 2>&1; then
+	missing_tools+=("ibtool")
+fi
+
+if [ "${#missing_tools[@]}" -gt 0 ]; then
+	echo "Error: missing build tool(s): ${missing_tools[*]}" >&2
+	if [ "$OS" = "Darwin" ]; then
+		echo "" >&2
+		echo "Install the macOS GUI build prerequisites:" >&2
+		echo "  brew install autoconf automake gettext libtool" >&2
+		echo "  xcode-select --install" >&2
+		echo "" >&2
+		echo "If Homebrew is installed but not on PATH, add it first:" >&2
+		echo "  eval \"\$(/opt/homebrew/bin/brew shellenv)\"" >&2
+	fi
+	exit 1
+fi
+
 for dir in "$PINENTRY_SRC" "$LIBGPG_ERROR_SRC" "$LIBASSUAN_SRC"; do
 	if [ ! -d "$dir" ]; then
 		echo "Error: $(basename "$dir") submodule not found at $dir" >&2
