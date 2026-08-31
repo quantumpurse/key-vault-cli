@@ -489,7 +489,7 @@ impl App {
             match &self.status {
                 Status::None => {
                     ui.label(
-                        egui::RichText::new("READY")
+                        egui::RichText::new("STATUS")
                             .font(label_font(9.5))
                             .color(self.colors.text_muted),
                     );
