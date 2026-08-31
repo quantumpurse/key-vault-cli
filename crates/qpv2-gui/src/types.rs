@@ -312,6 +312,10 @@ pub(crate) enum TransactionStatus {
         signatures: Vec<(usize, Vec<u8>)>,
         /// Clipboard/paste buffer for importing a co-signer response.
         import_response_json: String,
+        /// Step 01 done: the request has been copied. Recorded because a
+        /// clipboard write leaves no other trace — step 02 derives its
+        /// completion from `signatures`.
+        step1_done: bool,
     },
     /// Sending the signed transaction.
     Sending,

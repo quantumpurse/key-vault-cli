@@ -713,6 +713,7 @@ impl App {
                 unsigned_tx,
                 signatures: vec![(signer_index, raw_sig)],
                 import_response_json: String::new(),
+                step1_done: false,
             };
         }
     }

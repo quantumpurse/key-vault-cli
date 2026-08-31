@@ -126,11 +126,12 @@ impl App {
     /// Render the co-signer coordination panel (initiator side).
     /// Shows the signing request, collected signatures, import field, and submit button.
     pub(crate) fn show_cosigner_panel(&mut self, ui: &mut egui::Ui) {
-        let (kind, request, sig_count, threshold) = match &self.tx_status {
+        let (kind, request, sig_count, threshold, step1_done) = match &self.tx_status {
             TransactionStatus::AwaitingCoSigners {
                 kind,
                 request,
                 signatures,
+                step1_done,
                 ..
             } => (
                 *kind,
@@ -139,23 +140,17 @@ impl App {
                 request.as_ref().clone(),
                 signatures.len(),
                 request.multisig_config.threshold as usize,
+                *step1_done,
             ),
             _ => return,
         };
 
-        // Step pointer state: keyed by the signing message so a fresh
-        // request always starts back at step 01. Copying the request is
-        // what advances the pointer to step 02 (paste the response).
-        let copied_id = egui::Id::new(("cosign-request-copied", &request.signing_message));
-        let copied: bool = ui
-            .ctx()
-            .memory(|m| m.data.get_temp(copied_id).unwrap_or(false));
         // Once the threshold is met there's nothing left to point at —
         // the submit row takes over.
-        let done = sig_count >= threshold;
+        let step2_done = sig_count >= threshold;
 
-        let step1_open = !copied && !done;
-        let step2_open = copied && !done;
+        let step1_open = !step1_done && !step2_done;
+        let step2_open = step1_done && !step2_done;
 
         ui.add_space(16.0);
         panel_frame(&self.colors).show(ui, |ui| {
@@ -182,7 +177,7 @@ impl App {
                 "01",
                 "Signing Request",
                 step1_open,
-                copied || done,
+                step1_done || step2_done,
             );
             ui.add_space(8.0);
 
@@ -219,7 +214,11 @@ impl App {
             if copy_clicked {
                 if let Ok(json) = serde_json::to_string_pretty(&request) {
                     ui.ctx().copy_text(json);
-                    ui.ctx().memory_mut(|m| m.data.insert_temp(copied_id, true));
+                    if let TransactionStatus::AwaitingCoSigners { step1_done, .. } =
+                        &mut self.tx_status
+                    {
+                        *step1_done = true;
+                    }
                     self.status = crate::types::Status::Info("Signing request copied!".to_string());
                 }
             }
@@ -227,13 +226,13 @@ impl App {
             ui.add_space(14.0);
 
             // ── Import side: collect each co-signer's response ──
-            step_header(ui, &self.colors, "02", "Response", step2_open, done);
+            step_header(ui, &self.colors, "02", "Response", step2_open, step2_done);
             ui.add_space(8.0);
 
             // The hint must track the flow: after the last import the
             // buffer is cleared, and a bare "paste here" would read as
             // "you still owe a response".
-            let hint = if done {
+            let hint = if step2_done {
                 "All required signatures imported."
             } else if step2_open {
                 "Paste signing response JSON here..."
@@ -313,11 +312,6 @@ impl App {
                 .add(ghost_button(&self.colors, "Cancel", egui::vec2(80.0, 24.0)))
                 .clicked()
             {
-                // Drop the step-pointer state: a rebuilt transfer with
-                // the same inputs yields the identical signing message,
-                // which would resurrect "already copied" and start the
-                // new flow with step 01 disabled.
-                ui.ctx().memory_mut(|m| m.data.remove::<bool>(copied_id));
                 self.tx_status = TransactionStatus::Idle;
             }
         });

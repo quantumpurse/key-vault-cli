@@ -246,6 +246,9 @@ impl App {
         self.dao_deposit_all = false;
         self.dao_deposit_from_account = 0;
         self.tx_status = TransactionStatus::Idle;
+        // A co-signer response belongs to the wallet that signed it.
+        self.cosign_request_json.clear();
+        self.cosign_response_json = None;
 
         self.dao_deposited_cells.clear();
         self.dao_prepared_cells.clear();
