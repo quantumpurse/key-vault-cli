@@ -100,9 +100,10 @@ impl MultisigConfig {
     /// Validate multisig parameters.
     fn pre_validate(signers: &[Signer], threshold: u8, required_first_n: u8) -> Result<(), String> {
         let total_signers = signers.len();
-        if total_signers == 0 || total_signers > 255 {
+        // total signer must not be 0(impossible), 1(single sig), and ^255(hardcap)
+        if !(2..=255).contains(&total_signers) {
             return Err(format!(
-                "Signer count must be 1..=255, got {}.",
+                "A multisig account needs 2..=255 signers (at least one co-signer), got {}.",
                 total_signers
             ));
         }

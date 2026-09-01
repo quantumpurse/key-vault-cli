@@ -256,12 +256,14 @@ impl App {
 
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // No co-signers means a single-sig account, which this
+                // modal must not create — core rejects it too.
+                let has_co_signers = !self.multisig_co_signers.is_empty();
                 if ui
-                    .add(accent_button(
-                        &self.colors,
-                        "Create",
-                        egui::vec2(110.0, 30.0),
-                    ))
+                    .add_enabled(
+                        has_co_signers,
+                        accent_button(&self.colors, "Create", egui::vec2(110.0, 30.0)),
+                    )
                     .clicked()
                 {
                     self.multisig_modal_open = false;
