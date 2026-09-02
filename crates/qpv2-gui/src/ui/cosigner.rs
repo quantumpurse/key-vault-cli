@@ -91,10 +91,11 @@ fn step_header(
 }
 
 /// Wraps one step's controls: when the step isn't the live one, the
-/// whole zone is disabled and sunk to low opacity — reads as a
-/// powered-down panel section rather than egui's default grey tint.
-fn step_zone(ui: &mut egui::Ui, open: bool, add: impl FnOnce(&mut egui::Ui)) {
-    ui.add_enabled_ui(open, |ui| {
+/// whole zone is sunk to low opacity — reads as a powered-down panel
+/// section rather than egui's default grey tint — and, when `disable`
+/// is set, its widgets stop taking clicks.
+fn step_zone(ui: &mut egui::Ui, open: bool, disable: bool, add: impl FnOnce(&mut egui::Ui)) {
+    ui.add_enabled_ui(open || !disable, |ui| {
         if !open {
             ui.set_opacity(0.35);
         }
@@ -202,7 +203,7 @@ impl App {
             ui.add_space(8.0);
 
             let mut copy_clicked = false;
-            step_zone(ui, step1_open, |ui| {
+            step_zone(ui, step1_open, false, |ui| {
                 copy_clicked = ui
                     .add(ghost_button(
                         &self.colors,
@@ -240,7 +241,7 @@ impl App {
                 "Copy the signing request first."
             };
             let mut import_clicked = false;
-            step_zone(ui, step2_open, |ui| {
+            step_zone(ui, step2_open, true, |ui| {
                 if let TransactionStatus::AwaitingCoSigners {
                     ref mut import_response_json,
                     ..
