@@ -554,7 +554,22 @@ impl App {
                 self.earliest_funding_block_rx = None;
             }
             Ok(Ok(None)) => {
-                self.status = Status::Info("No funding history found.".to_string());
+                // No history means any start block is safe — suggest the
+                // tip so the LC skips the whole chain.
+                match self.qp_client.get_tip_header() {
+                    Ok(h) => {
+                        let tip = h.inner.number.value();
+                        self.set_block_input = tip.to_string();
+                        self.set_block_editing = true;
+                        self.status = Status::Info(format!(
+                            "No funding history found. Pre-filled current tip {}. Review and click Set.",
+                            tip
+                        ));
+                    }
+                    Err(e) => {
+                        self.status = Status::Error(format!("Failed to get tip header: {}", e));
+                    }
+                }
                 self.earliest_funding_block_rx = None;
             }
             Ok(Err(e)) => {
