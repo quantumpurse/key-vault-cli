@@ -331,7 +331,7 @@ impl App {
             .ok()
             .map(|w| w.auth_method);
 
-        self.lc_scripts_registered = false;
+        self.lc_script_registration_reeval = false;
         self.accounts = KeyVault::get_all_accounts(wallet_id).unwrap_or_default();
         self.screen = Screen::Unlocked;
         self.needs_initial_fetch = true;
@@ -407,7 +407,7 @@ impl App {
         // re-warms the cell dep and re-registers lock scripts against
         // the new backend (and skips both for FullNode / PublicRpc).
         self.lc_qr_dep_warmup_done = false;
-        self.lc_scripts_registered = false;
+        self.lc_script_registration_reeval = false;
 
         // The adoption series is per-network: drop any in-flight
         // fetch, show the new network's cached series immediately, and

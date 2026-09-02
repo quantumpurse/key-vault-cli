@@ -506,13 +506,15 @@ impl App {
                 }
             }
 
+            // This code is here because half the triggers involve node
+            // shutdown and restarts, and light node takes time to start up.
             // Register all accounts' lock scripts with the LC once it
             // is online. Covers the case where accounts were created on
             // a different backend and the user then switches to LC.
             // Anchored at the min synced block of existing scripts so
             // new accounts don't skip history; falls back to 0 when no
             // scripts are tracked yet (fresh LC after remove+recreate).
-            if !self.lc_scripts_registered && !self.accounts.is_empty() {
+            if !self.lc_script_registration_reeval && !self.accounts.is_empty() {
                 let lock_args: Vec<String> =
                     self.accounts.iter().map(|a| a.lock_args.clone()).collect();
                 let start_block = self.qp_client.synced_block().ok().flatten().unwrap_or(0);
@@ -521,7 +523,7 @@ impl App {
                     &lock_args,
                     start_block,
                 ) {
-                    Ok(()) => self.lc_scripts_registered = true,
+                    Ok(()) => self.lc_script_registration_reeval = true,
                     Err(e) => tracing::error!("lc warmup: register_lock_scripts: {}", e),
                 }
             }

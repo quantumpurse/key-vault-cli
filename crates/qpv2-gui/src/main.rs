@@ -191,10 +191,12 @@ pub(crate) struct App {
     // RPC readiness is invisible to the user. Reset on backend switch.
     pub(crate) lc_qr_dep_warmup_done: bool,
 
-    // Latched: `true` once the poller has registered all accounts'
-    // lock scripts with the LC after a backend switch. Reset on
-    // backend switch so the poller re-registers against the new LC.
-    pub(crate) lc_scripts_registered: bool,
+    // `true` while LC script registration needs re-evaluation — set at
+    // startup, on wallet switch, and on node config apply; cleared by
+    // `reeval_lc_script_registration` once registration succeeds. The
+    // poller retries while set, since triggers often fire before the
+    // LC child's RPC is up.
+    pub(crate) lc_script_registration_reeval: bool,
 
     // ── Auth state ──
     // The auth method recorded in `meta.json`, populated at
@@ -507,7 +509,7 @@ impl App {
             set_block_editing: false,
             earliest_funding_block_rx: None,
             lc_qr_dep_warmup_done: false,
-            lc_scripts_registered: false,
+            lc_script_registration_reeval: false,
             // Auth method is read from meta.json on demand by
             // each flow that needs it; cached `None` here. Setup screen
             // doesn't need it; Locked screen reads it before rendering.
