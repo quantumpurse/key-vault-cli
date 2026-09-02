@@ -13,6 +13,15 @@ use crate::App;
 /// the cost is negligible.
 const DEVICE_PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
+/// Where light-client registration starts scanning for new scripts.
+pub(crate) enum StartingBlock {
+    /// Freshly generated key — no history can exist, scan from the tip.
+    Tip,
+    /// Imported key (mnemonic or device) — history unknown, ask a public
+    /// indexer where funding started; fall back to genesis if unreachable.
+    Detect,
+}
+
 impl App {
     /// Build the wallet cache from disk. Called as an associated function
     /// during `App::new` (before `self` exists) and as a method thereafter.
@@ -47,29 +56,51 @@ impl App {
     }
 
     /// Tells the running light client to start indexing the given
-    /// accounts from the current tip onward, in a single `set_scripts`
-    /// RPC call. No-op when the backend isn't LightClient, no local
-    /// process is running, or the input is empty — full nodes / public
-    /// RPC index everything by default, and a stopped light client has
-    /// nothing to register against.
-    ///
-    /// Import-existing-wallet (register every account with an earlier
-    /// start block per account) is deliberately not covered here; that
-    /// flow isn't implemented yet.
-    pub(crate) fn register_lock_scripts_with_light_client(&mut self, lock_args_list: &[String]) {
+    /// accounts from the block `anchor` resolves to, in a single
+    /// `set_scripts` RPC call. No-op when the backend isn't LightClient,
+    /// no local process is running, or the input is empty — full nodes /
+    /// public RPC index everything by default, and a stopped light
+    /// client has nothing to register against.
+    pub(crate) fn register_lock_scripts_with_light_client(
+        &mut self,
+        lock_args_list: &[String],
+        start: StartingBlock,
+    ) {
         if self.qp_client.config().node_type != ckb_node::NodeType::LightClient
             || !self.local_node.has_local_process()
             || lock_args_list.is_empty()
         {
             return;
         }
-        let start_block = match self.qp_client.get_tip_header() {
+        let tip = match self.qp_client.get_tip_header() {
             Ok(h) => h.inner.number.value(),
             Err(e) => {
                 let msg = format!("Failed to get tip header: {}", e);
                 tracing::error!("{}", msg);
                 self.status = Status::Error(msg);
                 return;
+            }
+        };
+        let start_block = match start {
+            StartingBlock::Tip => tip,
+            StartingBlock::Detect => {
+                let network = self.qp_client.network();
+                let url = ckb_node::NodeConfig::default_rpc_url_for(
+                    ckb_node::NodeType::PublicRpc,
+                    network,
+                );
+                let client = ckb_node::client::FullNodeClient::new(url);
+                match client.find_earliest_funding_block(lock_args_list, network) {
+                    Ok(Some(earliest)) => earliest.saturating_sub(1),
+                    Ok(None) => tip,
+                    Err(e) => {
+                        tracing::error!("earliest-funding detection failed: {}", e);
+                        self.status = Status::Info(
+                            "Could not detect funding history; scanning from genesis.".to_string(),
+                        );
+                        0
+                    }
+                }
             }
         };
         if let Err(e) = ckb_node::wallet_helpers::lc::register_lock_scripts(
@@ -92,6 +123,7 @@ impl App {
         success_msg: &str,
         wallet_id: u32,
         wallet_name: String,
+        start: StartingBlock,
     ) {
         // Same wipe as `switch_wallet`: creating or importing switches
         // the active wallet too, and the previous wallet's runtime state
@@ -106,9 +138,9 @@ impl App {
                 self.auth_method = Some(auth_method);
                 let lock_args: Vec<String> =
                     self.accounts.iter().map(|a| a.lock_args.clone()).collect();
-                self.register_lock_scripts_with_light_client(&lock_args);
                 self.screen = Screen::Unlocked;
                 self.status = Status::Info(success_msg.to_string());
+                self.register_lock_scripts_with_light_client(&lock_args, start);
                 self.last_poll_time = std::time::Instant::now();
                 self.new_wallet_name.clear();
                 self.wallet_selector_open = false;
@@ -521,6 +553,7 @@ impl App {
             &format!("Wallet created successfully!{}", strength_str),
             wallet_id,
             wallet_name,
+            StartingBlock::Tip,
         );
     }
 
@@ -591,9 +624,10 @@ impl App {
                 self.balances.insert(account.lock_args.clone(), Some(0));
                 self.spendable_balances
                     .insert(account.lock_args.clone(), Some(0));
-                self.register_lock_scripts_with_light_client(std::slice::from_ref(
-                    &account.lock_args,
-                ));
+                self.register_lock_scripts_with_light_client(
+                    std::slice::from_ref(&account.lock_args),
+                    StartingBlock::Tip,
+                );
                 self.accounts.push(account);
                 self.refresh_wallet_cache();
                 self.status = Status::Info("New account created!".to_string());
@@ -663,7 +697,10 @@ impl App {
         self.balances.insert(account.lock_args.clone(), Some(0));
         self.spendable_balances
             .insert(account.lock_args.clone(), Some(0));
-        self.register_lock_scripts_with_light_client(std::slice::from_ref(&account.lock_args));
+        self.register_lock_scripts_with_light_client(
+            std::slice::from_ref(&account.lock_args),
+            StartingBlock::Tip,
+        );
         self.accounts.push(account);
         self.refresh_wallet_cache();
         self.status = Status::Info("New Trezor account imported!".to_string());
@@ -745,6 +782,7 @@ impl App {
             &format!("Wallet imported successfully!{}", strength_str),
             wallet_id,
             wallet_name,
+            StartingBlock::Detect,
         );
     }
 
@@ -840,6 +878,7 @@ impl App {
             &format!("Wallet created with {}!", keychain::short_name()),
             wallet_id,
             wallet_name,
+            StartingBlock::Tip,
         );
     }
 
@@ -1001,6 +1040,7 @@ impl App {
             "Trezor wallet connected!",
             wallet_id,
             wallet_name,
+            StartingBlock::Detect,
         );
     }
 
@@ -1089,9 +1129,10 @@ impl App {
                 self.balances.insert(account.lock_args.clone(), Some(0));
                 self.spendable_balances
                     .insert(account.lock_args.clone(), Some(0));
-                self.register_lock_scripts_with_light_client(std::slice::from_ref(
-                    &account.lock_args,
-                ));
+                self.register_lock_scripts_with_light_client(
+                    std::slice::from_ref(&account.lock_args),
+                    StartingBlock::Tip,
+                );
                 self.accounts.push(account);
                 self.refresh_wallet_cache();
                 self.status = Status::Info("Multisig account created!".to_string());
@@ -1173,6 +1214,7 @@ impl App {
             &format!("Wallet imported with {}!", keychain::short_name()),
             wallet_id,
             wallet_name,
+            StartingBlock::Detect,
         );
     }
 
@@ -1260,6 +1302,7 @@ impl App {
             "Wallet created with FIDO2 security key!",
             wallet_id,
             wallet_name,
+            StartingBlock::Tip,
         );
     }
 
@@ -1413,6 +1456,7 @@ impl App {
             "Wallet imported with FIDO2 security key!",
             wallet_id,
             wallet_name,
+            StartingBlock::Detect,
         );
     }
 }
