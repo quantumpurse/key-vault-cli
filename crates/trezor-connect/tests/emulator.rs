@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use ckb_types::{
     bytes::Bytes,
-    core::{Capacity, ScriptHashType, TransactionBuilder, TransactionView},
+    core::{Capacity, TransactionBuilder, TransactionView},
     packed::{Byte32, CellInput, CellOutput, OutPoint, Script, WitnessArgs},
     prelude::*,
     H256,
@@ -67,7 +67,7 @@ where
 fn testnet_lock(lock_args: &[u8]) -> Script {
     let code_hash_hex = qpv2_core::constants::CKB_TESTNET_CODE_HASH.trim_start_matches("0x");
     let code_hash = Byte32::from_slice(&hex::decode(code_hash_hex).unwrap()).unwrap();
-    let hash_type: ckb_types::packed::Byte = ScriptHashType::Data1.into();
+    let hash_type: ckb_types::packed::Byte = qpv2_core::constants::CKB_TESTNET_HASH_TYPE.into();
     Script::new_builder()
         .code_hash(code_hash)
         .hash_type(hash_type)

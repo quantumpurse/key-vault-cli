@@ -78,7 +78,7 @@ impl FullNodeClient {
             return Ok(None);
         }
 
-        let (code_hash_hex, hash_type_str) = match network {
+        let (code_hash_hex, hash_type) = match network {
             NetworkType::Mainnet => (
                 qpv2_core::constants::CKB_MAINNET_CODE_HASH,
                 qpv2_core::constants::CKB_MAINNET_HASH_TYPE,
@@ -88,11 +88,7 @@ impl FullNodeClient {
                 qpv2_core::constants::CKB_TESTNET_HASH_TYPE,
             ),
         };
-        let script_hash_type = match hash_type_str {
-            "type" => ckb_jsonrpc_types::ScriptHashType::Type,
-            "data1" => ckb_jsonrpc_types::ScriptHashType::Data1,
-            _ => ckb_jsonrpc_types::ScriptHashType::Data,
-        };
+        let script_hash_type: ckb_jsonrpc_types::ScriptHashType = hash_type.into();
         let code_hash_clean = code_hash_hex.strip_prefix("0x").unwrap_or(code_hash_hex);
         let mut code_hash_bytes = [0u8; 32];
         let decoded = hex::decode(code_hash_clean)

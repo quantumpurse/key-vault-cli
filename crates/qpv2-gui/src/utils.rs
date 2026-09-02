@@ -13,9 +13,9 @@ pub(crate) fn lock_args_to_address(
     is_mainnet: bool,
 ) -> Result<ckb_sdk::Address, String> {
     use ckb_sdk::{Address, AddressPayload, NetworkType};
-    use ckb_types::{bytes::Bytes, core::ScriptHashType};
+    use ckb_types::bytes::Bytes;
 
-    let (code_hash_hex, hash_type_str, network) = if is_mainnet {
+    let (code_hash_hex, script_hash_type, network) = if is_mainnet {
         (
             CKB_MAINNET_CODE_HASH,
             CKB_MAINNET_HASH_TYPE,
@@ -33,12 +33,6 @@ pub(crate) fn lock_args_to_address(
         .map_err(|e| format!("Failed to decode code_hash: {:?}", e))?;
     let mut code_hash_array = [0u8; 32];
     code_hash_array.copy_from_slice(&code_hash_bytes);
-
-    let script_hash_type = match hash_type_str {
-        "type" => ScriptHashType::Type,
-        "data1" => ScriptHashType::Data1,
-        _ => return Err(format!("Unsupported hash_type: {}", hash_type_str)),
-    };
 
     let args_bytes =
         hex::decode(lock_args).map_err(|e| format!("Failed to decode lock_args: {:?}", e))?;

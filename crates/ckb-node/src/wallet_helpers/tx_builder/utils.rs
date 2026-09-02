@@ -4,7 +4,7 @@ use crate::client::QpClient;
 use crate::error::NodeManagerError;
 use ckb_sdk::traits::{DefaultCellDepResolver, HeaderDepResolver, TransactionDependencyProvider};
 use ckb_sdk::types::ScriptId;
-use ckb_types::core::{BlockView, Capacity, DepType, ScriptHashType, TransactionView};
+use ckb_types::core::{BlockView, Capacity, DepType, TransactionView};
 use ckb_types::packed::{CellDep, CellOutput, OutPoint, Script};
 use ckb_types::prelude::*;
 use ckb_types::H256;
@@ -33,14 +33,14 @@ pub fn cell_dep_resolver_from_rpc(
     let (code_hash_hex, hash_type, dep_tx_hash_hex, dep_index) = if is_mainnet {
         (
             constants::CKB_MAINNET_CODE_HASH,
-            ScriptHashType::Type,
+            constants::CKB_MAINNET_HASH_TYPE,
             constants::CKB_MAINNET_CELL_DEP_TX_HASH,
             constants::CKB_MAINNET_CELL_DEP_INDEX,
         )
     } else {
         (
             constants::CKB_TESTNET_CODE_HASH,
-            ScriptHashType::Data1,
+            constants::CKB_TESTNET_HASH_TYPE,
             constants::CKB_TESTNET_CELL_DEP_TX_HASH,
             constants::CKB_TESTNET_CELL_DEP_INDEX,
         )

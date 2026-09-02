@@ -1,4 +1,5 @@
 use super::types::ScryptParam;
+use ckb_types::core::ScriptHashType;
 
 // Constants
 pub const SALT_LENGTH: usize = 16; // 128-bit salt
@@ -44,16 +45,18 @@ pub const VAULT_ENC_KEY_HKDF_INFO: &[u8] = b"quantum-purse-v2/vault-encryption/a
 /// Code hash and hash type — used to construct CKB addresses from lock script arguments.
 pub const CKB_MAINNET_CODE_HASH: &str =
     "0x302d35982f865ebcbedb9a9360e40530ed32adb8e10b42fbbe70d8312ff7cedf";
-pub const CKB_MAINNET_HASH_TYPE: &str = "type";
+pub const CKB_MAINNET_HASH_TYPE: ScriptHashType = ScriptHashType::Type;
+
 pub const CKB_TESTNET_CODE_HASH: &str =
     "0x147ecbb5c5127d982ee1362d2c2bb4267803da2eb006d150e88af6caaa0a7eaf";
-pub const CKB_TESTNET_HASH_TYPE: &str = "data1";
+pub const CKB_TESTNET_HASH_TYPE: ScriptHashType = ScriptHashType::Data2;
 
 /// Cell dep OutPoint — the on-chain cell that contains the lock script binary.
 /// Used to construct the CellDep when building transactions.
 pub const CKB_MAINNET_CELL_DEP_TX_HASH: &str =
     "0x4598d00df2f3dc8bc40eee38689a539c94f6cc3720b7a2a6746736daa60f500a";
 pub const CKB_MAINNET_CELL_DEP_INDEX: u32 = 0;
+
 pub const CKB_TESTNET_CELL_DEP_TX_HASH: &str =
     "0x631d9a6049fb1fc3790e89d9daf35abe535b5e754cd8c3404319319710f0b106";
 pub const CKB_TESTNET_CELL_DEP_INDEX: u32 = 0;

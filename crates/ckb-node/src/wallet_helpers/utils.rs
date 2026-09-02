@@ -10,7 +10,7 @@ pub(crate) fn build_qr_lock_script(
     network: NetworkType,
     lock_args_hex: &str,
 ) -> Result<ckb_jsonrpc_types::Script, NodeManagerError> {
-    let (code_hash_hex, hash_type_str) = match network {
+    let (code_hash_hex, hash_type) = match network {
         NetworkType::Mainnet => (
             qpv2_core::constants::CKB_MAINNET_CODE_HASH,
             qpv2_core::constants::CKB_MAINNET_HASH_TYPE,
@@ -20,12 +20,7 @@ pub(crate) fn build_qr_lock_script(
             qpv2_core::constants::CKB_TESTNET_HASH_TYPE,
         ),
     };
-
-    let hash_type = match hash_type_str {
-        "type" => ckb_jsonrpc_types::ScriptHashType::Type,
-        "data1" => ckb_jsonrpc_types::ScriptHashType::Data1,
-        _ => ckb_jsonrpc_types::ScriptHashType::Data,
-    };
+    let hash_type: ckb_jsonrpc_types::ScriptHashType = hash_type.into();
 
     // H256: FromStr does the hex-decode and 32-byte length check in one
     // step (same idiom as tx_builder/utils.rs).
