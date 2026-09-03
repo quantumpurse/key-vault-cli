@@ -5,7 +5,7 @@
 
 use eframe::egui;
 
-use crate::types::{label_font, AppColors, TransactionStatus};
+use crate::types::{label_font, AppColors, Status, TransactionStatus};
 use crate::ui::utils::{ghost_button, panel_frame, section_header, SectionCounter};
 use crate::App;
 
@@ -617,78 +617,23 @@ impl App {
             }
         };
 
-        // Authenticate
-        let auth = match &self.auth_method {
-            Some(qpv2_core::types::AuthMethod::Password) => {
-                match qpv2_core::pinentry::prompt_password(
-                    "Enter your wallet password to co-sign a multisig transaction.",
-                    "Password:",
-                ) {
-                    Ok(pw) => qpv2_core::types::AuthKey::Password(pw),
-                    Err(e) => {
-                        self.status = crate::types::Status::Error(format!("Auth failed: {}", e));
-                        return;
-                    }
-                }
-            }
-            Some(qpv2_core::types::AuthMethod::Keychain) => {
-                match keychain::retrieve_key(self.wallet_id) {
-                    Ok(key) => qpv2_core::types::AuthKey::CryptoKey(key),
-                    Err(e) => {
-                        self.status = crate::types::Status::Error(format!("Auth failed: {}", e));
-                        return;
-                    }
-                }
-            }
-            Some(qpv2_core::types::AuthMethod::Fido2 { ref credential_id }) => {
-                let cred_bytes = match hex::decode(credential_id) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        self.status =
-                            crate::types::Status::Error(format!("Invalid credential: {}", e));
-                        return;
-                    }
-                };
-                match qpv2_core::pinentry::prompt_password(
-                    "Enter your wallet password to co-sign a multisig transaction.",
-                    "Password:",
-                ) {
-                    Ok(pin) => match keychain::fido2::authenticate(&cred_bytes, &pin) {
-                        Ok(hmac) => match qpv2_core::utilities::derive_vault_enc_key(&hmac) {
-                            Ok(key) => qpv2_core::types::AuthKey::CryptoKey(key),
-                            Err(e) => {
-                                self.status = crate::types::Status::Error(format!(
-                                    "Key derivation failed: {}",
-                                    e
-                                ));
-                                return;
-                            }
-                        },
-                        Err(e) => {
-                            self.status =
-                                crate::types::Status::Error(format!("FIDO2 auth failed: {}", e));
-                            return;
-                        }
-                    },
-                    Err(e) => {
-                        self.status =
-                            crate::types::Status::Error(format!("PIN prompt failed: {}", e));
-                        return;
-                    }
-                }
-            }
-            Some(qpv2_core::types::AuthMethod::Trezor { .. }) => {
-                // Multisig co-signing on a Trezor is not supported: the firmware
-                // only signs a transaction locked by its own single-sig lock.
-                self.status = crate::types::Status::Error(
-                    "Co-signing a multisig transaction on a Trezor is not supported yet."
-                        .to_string(),
-                );
-                return;
-            }
-            None => {
-                self.status =
-                    crate::types::Status::Error("No authentication method set.".to_string());
+        // Authenticate. Trezor is refused up front — the firmware only signs
+        // a transaction locked by its own single-sig lock, so there is no
+        // device flow for `resolve_auth_key`'s generic Trezor message to
+        // point at.
+        if matches!(
+            self.auth_method,
+            Some(qpv2_core::types::AuthMethod::Trezor { .. })
+        ) {
+            self.status = crate::types::Status::Error(
+                "Co-signing a multisig transaction on a Trezor is not supported yet.".to_string(),
+            );
+            return;
+        }
+        let auth = match self.resolve_auth_key("co-sign a multisig transaction") {
+            Ok(a) => a,
+            Err(e) => {
+                self.status = Status::Error(format!("Auth failed: {}", e));
                 return;
             }
         };

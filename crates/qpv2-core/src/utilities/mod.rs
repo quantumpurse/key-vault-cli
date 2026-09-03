@@ -25,7 +25,10 @@ mod tests;
 /// carries its own checksum, so a phrase cut at a chunk boundary still
 /// parses chunk by chunk — the total word count is the only check that
 /// catches it, which is why it runs first.
-pub(crate) fn seed_phrase_to_entropy(variant: SpxVariant, seed_phrase: &str) -> Result<SecureVec, String> {
+pub(crate) fn seed_phrase_to_entropy(
+    variant: SpxVariant,
+    seed_phrase: &str,
+) -> Result<SecureVec, String> {
     let words: Vec<&str> = seed_phrase.split_whitespace().collect();
     let word_count = words.len();
 
@@ -56,7 +59,10 @@ pub(crate) fn seed_phrase_to_entropy(variant: SpxVariant, seed_phrase: &str) -> 
 
 /// Inverse of [`seed_phrase_to_entropy`]: renders master-seed entropy as
 /// the space-joined words of its per-component BIP39 mnemonics.
-pub(crate) fn entropy_to_seed_phrase(variant: SpxVariant, entropy: &[u8]) -> Result<SecureString, String> {
+pub(crate) fn entropy_to_seed_phrase(
+    variant: SpxVariant,
+    entropy: &[u8],
+) -> Result<SecureString, String> {
     let size = variant.required_entropy_size_component();
     let mut combined_mnemonic = SecureString::new();
     for chunk in entropy.chunks(size) {
