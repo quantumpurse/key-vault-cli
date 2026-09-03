@@ -1,10 +1,11 @@
 use super::constants::{ENC_SCRYPT, IV_LENGTH, SALT_LENGTH, VAULT_ENC_KEY_HKDF_INFO};
-use super::types::{AuthKey, CipherPayload, ScryptParam};
+use super::types::{AuthKey, CipherPayload, ScryptParam, SpxVariant};
 use crate::containers::{SecureString, SecureVec};
 use aes_gcm::{
     aead::{Aead, KeyInit},
     AeadInPlace, Aes256Gcm, Key, Nonce,
 };
+use bip39::{Language, Mnemonic};
 use ckb_fips205_utils::{
     ckb_tx_message_all_from_mock_tx::{generate_ckb_tx_message_all_from_mock_tx, ScriptOrIndex},
     Hasher,
@@ -16,6 +17,60 @@ use scrypt::{scrypt, Params};
 use sha2::Sha256;
 #[cfg(test)]
 mod tests;
+
+/// Parses a QPV2 seed phrase into master-seed entropy.
+///
+/// The phrase is the concatenation of `required_bip39_size_in_word_total / 18`
+/// standard BIP39 mnemonics, one per seed component. Each 18-word chunk
+/// carries its own checksum, so a phrase cut at a chunk boundary still
+/// parses chunk by chunk — the total word count is the only check that
+/// catches it, which is why it runs first.
+pub(crate) fn seed_phrase_to_entropy(variant: SpxVariant, seed_phrase: &str) -> Result<SecureVec, String> {
+    let words: Vec<&str> = seed_phrase.split_whitespace().collect();
+    let word_count = words.len();
+
+    if word_count != variant.required_bip39_size_in_word_total() {
+        let msg = format!(
+            "Mismatch: The chosen SPHINCS+ parameter set {} requires {} words whereas the input mnemonic has {} words.",
+            variant,
+            variant.required_bip39_size_in_word_total(),
+            word_count
+        );
+        tracing::error!("{}", msg);
+        return Err(msg);
+    }
+
+    let mut combined_entropy = SecureVec::new_with_length(0);
+    let size = variant.required_bip39_size_in_word_component();
+    for (index, chunk) in (0_u8..).zip(words.chunks(size)) {
+        let chunk_str = SecureString::from_string(chunk.join(" "));
+        let mnemonic = Mnemonic::parse_in(Language::English, &*chunk_str).map_err(|e| {
+            let msg = format!("Invalid mnemonic: Chunk{} index {}: {}", size, index, e);
+            tracing::error!("{}", msg);
+            msg
+        })?;
+        combined_entropy.extend(SecureVec::from_vec(mnemonic.to_entropy()));
+    }
+    Ok(combined_entropy)
+}
+
+/// Inverse of [`seed_phrase_to_entropy`]: renders master-seed entropy as
+/// the space-joined words of its per-component BIP39 mnemonics.
+pub(crate) fn entropy_to_seed_phrase(variant: SpxVariant, entropy: &[u8]) -> Result<SecureString, String> {
+    let size = variant.required_entropy_size_component();
+    let mut combined_mnemonic = SecureString::new();
+    for chunk in entropy.chunks(size) {
+        let mnemonic = Mnemonic::from_entropy_in(Language::English, chunk).map_err(|e| {
+            let msg = format!("Export seed error: {}", e);
+            tracing::error!("{}", msg);
+            msg
+        })?;
+        for word in mnemonic.words() {
+            combined_mnemonic.extend(word); //TODO: Pre-allocate SecureString capacity to prevent push_str reallocation from leaking unzeroized copies of the mnemonic in freed heap memory.
+        }
+    }
+    Ok(combined_mnemonic)
+}
 
 /// Generates random bytes for cryptographic use.
 ///

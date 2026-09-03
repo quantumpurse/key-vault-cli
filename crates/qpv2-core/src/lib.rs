@@ -5,7 +5,6 @@
 //! and the SPHINCS+ signature scheme for post-quantum transaction signing. The master seed is encrypted and stored
 //! locally in files, with access authenticated via password (Scrypt) or pre-derived key (e.g. passkey PRF + HKDF).
 
-use bip39::{Language, Mnemonic};
 use fips205::{
     traits::{KeyGen, SerDes, Signer, Verifier},
     *,
@@ -443,19 +442,7 @@ impl KeyVault {
             return Err("Seed phrase cannot be empty or uninitialized".to_string());
         }
 
-        let words: Vec<&str> = seed_phrase.split_whitespace().collect();
-        let word_count = words.len();
-
-        if word_count != self.variant.required_bip39_size_in_word_total() {
-            let msg = format!(
-                "Mismatch: The chosen SPHINCS+ parameter set {} requires {} words whereas the input mnemonic has {} words.",
-                self.variant,
-                self.variant.required_bip39_size_in_word_total(),
-                word_count
-            );
-            tracing::error!("{}", msg);
-            return Err(msg);
-        }
+        let combined_entropy = utilities::seed_phrase_to_entropy(self.variant, &seed_phrase)?;
 
         tracing::info!(
             "Importing seed phrase (wallet_id={}, variant={}, name={})",
@@ -463,18 +450,6 @@ impl KeyVault {
             self.variant,
             name
         );
-
-        let mut combined_entropy = SecureVec::new_with_length(0);
-        let size = self.variant.required_bip39_size_in_word_component();
-        for (index, chunk) in (0_u8..).zip(words.chunks(size)) {
-            let chunk_str = SecureString::from_string(chunk.join(" "));
-            let mnemonic = Mnemonic::parse_in(Language::English, &*chunk_str).map_err(|e| {
-                let msg = format!("Invalid mnemonic: Chunk{} index {}: {}", size, index, e);
-                tracing::error!("{}", msg);
-                msg
-            })?;
-            combined_entropy.extend(SecureVec::from_vec(mnemonic.to_entropy()));
-        }
 
         let payload = utilities::encrypt(&auth, &combined_entropy)?;
         db::create_wallet_dir(self.wallet_id).map_err(|e| e.to_string())?;
@@ -513,22 +488,7 @@ impl KeyVault {
             })?;
 
         let entropy = utilities::decrypt(&auth, payload)?;
-        let size = self.variant.required_entropy_size_component();
-        let chunks = entropy.chunks(size);
-
-        let mut combined_mnemonic = SecureString::new();
-        for chunk in chunks {
-            let mnemonic = Mnemonic::from_entropy_in(Language::English, chunk).map_err(|e| {
-                let msg = format!("Export seed error: {}", e);
-                tracing::error!("{}", msg);
-                msg
-            })?;
-            for word in mnemonic.words() {
-                combined_mnemonic.extend(word); //TODO: Pre-allocate SecureString capacity to prevent push_str reallocation from leaking unzeroized copies of the mnemonic in freed heap memory.
-            }
-        }
-
-        Ok(combined_mnemonic)
+        utilities::entropy_to_seed_phrase(self.variant, &entropy)
     }
 
     /// Sign and produce a valid signature for the CKB Blockchain Quantum Resistant Lock Script.
