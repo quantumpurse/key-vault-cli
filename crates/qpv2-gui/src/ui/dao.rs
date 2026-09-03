@@ -299,10 +299,15 @@ impl App {
                                 Some(b) => format_ckb_balance(b),
                                 None => "--".to_string(),
                             };
-                            format!("Account #{} ({})", idx, bal_str)
+                            let ms = if self.accounts[idx].config.signers.len() > 1 {
+                                " multisig"
+                            } else {
+                                ""
+                            };
+                            format!("Account #{} ({}){}", idx, bal_str, ms)
                         };
 
-                        let prev_from_account = self.dao_deposit_from_account;
+                        let prev_picked_from_account = self.dao_deposit_from_account;
                         let from_combo = egui::ComboBox::from_id_salt("dao_deposit_from")
                             .selected_text(&from_text)
                             .width(ui.available_width())
@@ -313,11 +318,16 @@ impl App {
                                         .get(&account.lock_args)
                                         .and_then(|b| b.as_ref())
                                         .copied();
+                                    let ms = if account.config.signers.len() > 1 {
+                                        " multisig"
+                                    } else {
+                                        ""
+                                    };
                                     let label = match bal {
                                         Some(b) => {
-                                            format!("Account #{} ({})", i, format_ckb_balance(b))
+                                            format!("Account #{} ({}){}", i, format_ckb_balance(b), ms)
                                         }
-                                        None => format!("Account #{}", i),
+                                        None => format!("Account #{}{}", i, ms),
                                     };
                                     ui.selectable_value(
                                         &mut self.dao_deposit_from_account,
@@ -327,7 +337,7 @@ impl App {
                                 }
                             });
                         pin_popup_above_modal(ui, &from_combo.response);
-                        if self.dao_deposit_from_account != prev_from_account
+                        if self.dao_deposit_from_account != prev_picked_from_account
                             && self.dao_deposit_all
                         {
                             self.dao_deposit_all = false;

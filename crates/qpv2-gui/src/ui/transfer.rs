@@ -117,7 +117,12 @@ impl App {
                         Some(b) => format_ckb_balance(b),
                         None => "--".to_string(),
                     };
-                    format!("Account #{} ({})", idx, bal_str)
+                    let ms = if self.accounts[idx].config.signers.len() > 1 {
+                        " multisig"
+                    } else {
+                        ""
+                    };
+                    format!("Account #{} ({}){}", idx, bal_str, ms)
                 };
                 let selected_color = if self.accounts.is_empty() {
                     self.colors.text_muted
@@ -125,7 +130,7 @@ impl App {
                     self.colors.accent
                 };
 
-                let prev_from_account = self.transfer_from_account;
+                let prev_picked_from_account = self.transfer_from_account;
                 egui::ComboBox::from_id_salt("transfer_from")
                     .selected_text(
                         egui::RichText::new(&from_text)
@@ -140,11 +145,16 @@ impl App {
                                 .get(&account.lock_args)
                                 .and_then(|b| b.as_ref())
                                 .copied();
+                            let ms = if account.config.signers.len() > 1 {
+                                " multisig"
+                            } else {
+                                ""
+                            };
                             let label = match bal {
                                 Some(b) => {
-                                    format!("Account #{} ({})", i, format_ckb_balance(b))
+                                    format!("Account #{} ({}){}", i, format_ckb_balance(b), ms)
                                 }
-                                None => format!("Account #{}", i),
+                                None => format!("Account #{}{}", i, ms),
                             };
                             let text = egui::RichText::new(label).size(12.0).color(
                                 if self.transfer_from_account == i {
@@ -156,8 +166,9 @@ impl App {
                             ui.selectable_value(&mut self.transfer_from_account, i, text);
                         }
                     });
-                // Clear send_all if the user switches accounts.
-                if self.transfer_from_account != prev_from_account && self.transfer_all {
+                // On account switch, clear send_all and the amount it
+                // filled in — that number is the old account's balance.
+                if self.transfer_from_account != prev_picked_from_account && self.transfer_all {
                     self.transfer_all = false;
                     self.transfer_amount.clear();
                 }
