@@ -6,7 +6,7 @@
 	url = https://github.com/nervosnetwork/ckb.git
 [submodule "vendor/pinentry"]
 	path = vendor/pinentry
-	url = https://github.com/tea2x/pinentry.git
+	url = https://github.com/quantumpurse/pinentry.git
 	ignore = dirty
 [submodule "vendor/libgpg-error"]
 	path = vendor/libgpg-error
