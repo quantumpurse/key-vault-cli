@@ -73,6 +73,13 @@ fn pinentry_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// gpg-error code the bundled pinentry returns when the typed or pasted
+/// input is longer than its limit (`PINENTRY_MAX_PASSPHRASE_LENGTH` in
+/// `vendor/pinentry/pinentry/pinentry.h`). It refuses rather than clips,
+/// so the user has to be told why. The `pinentry` crate has no named
+/// variant for this code.
+const GPG_ERR_TOO_LARGE: u16 = 67;
+
 /// Maps pinentry errors to user-facing strings.
 fn map_err(e: PinentryError) -> String {
     match e {
@@ -80,6 +87,9 @@ fn map_err(e: PinentryError) -> String {
         PinentryError::Timeout => "Password entry timed out.".to_string(),
         PinentryError::Io(e) => format!("Password dialog I/O error: {}", e),
         PinentryError::Encoding(_) => "Password is not valid UTF-8.".to_string(),
+        PinentryError::Gpg(g) if g.code() == GPG_ERR_TOO_LARGE => {
+            "Input is longer than the 1024-character limit of the entry dialog.".to_string()
+        }
         PinentryError::Gpg(g) => format!("Password dialog error: {}", g),
     }
 }
