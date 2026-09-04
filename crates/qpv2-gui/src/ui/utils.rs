@@ -510,7 +510,7 @@ pub(crate) fn v1_import_checkbox(ui: &mut egui::Ui, colors: &AppColors, checked:
             }
             ui.checkbox(
                 checked,
-                egui::RichText::new("User comes from the Quantum Purse v1 web wallet.")
+                egui::RichText::new("User comes from the Quantum Purse V1 wallet.")
                     .size(12.0)
                     .color(label),
             );
