@@ -207,7 +207,7 @@ the internal cryptographic construction is not.
 The 32-byte vault encryption key is sealed under the TPM using the
 Platform Crypto Provider's well-known seal key
 (`TPM_RSA_SRK_SEAL_KEY`), via `NCryptEncrypt` with
-`NCRYPT_SEALING_FLAG`. A user-chosen PIN becomes the sealed object's
+`NCRYPT_SEALING_FLAG`. A user-chosen PIN of at least six characters becomes the sealed object's
 authorization value, passed as the seal password, and the opaque blob
 is stored to `pcp_sealed_blob.bin` on disk. On unlock the PIN is
 supplied again and `NCryptDecrypt` returns the 32 bytes. The sealed
@@ -225,7 +225,7 @@ family of operation BitLocker uses for its volume master key.
 ##### 3. Linux — TPM seal via `tss-esapi`
 
 The 32-byte vault encryption key is sealed under the TPM's Storage
-Root Key (SRK) using `TPM2_Create`. A user-chosen PIN is set as the
+Root Key (SRK) using `TPM2_Create`. A user-chosen PIN of at least six characters is set as the
 sealed object's `authValue` during creation and verified on-chip
 during every unseal — failed attempts count toward the TPM's
 dictionary attack lockout. The sealed blobs (Private + Public) are

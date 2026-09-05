@@ -445,3 +445,23 @@ pub fn parse_ckb_to_shannons(input: &str) -> Result<u64, String> {
         .checked_add(frac_shannons)
         .ok_or_else(|| "Amount too large.".to_string())
 }
+
+/// Fewest characters a hardware-backed PIN may have. Six is enough because
+/// the TPM throttles guesses in hardware; the floor exists so that throttling
+/// has something to protect. Compare `password_checker`, which guards a file
+/// an attacker can brute-force offline and therefore demands far more.
+pub const MIN_PIN_CHARS: usize = 6;
+
+/// Checks a newly chosen PIN against the rule the creation dialog states.
+/// Counts characters rather than bytes so a multibyte PIN is measured the way
+/// the user sees it. Any character is allowed; letters only make a PIN stronger.
+/// Reads the secret in place and never copies it.
+pub fn validate_pin(pin: &SecureString) -> Result<(), String> {
+    if pin.chars().count() < MIN_PIN_CHARS {
+        return Err(format!(
+            "PIN must be at least {} characters.",
+            MIN_PIN_CHARS
+        ));
+    }
+    Ok(())
+}

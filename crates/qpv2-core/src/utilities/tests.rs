@@ -206,3 +206,34 @@ fn test_seed_phrase_rejects_missing_word() {
         .expect("35 words must not parse for a 36-word variant");
     assert!(err.contains("requires 36 words"), "unexpected error: {err}");
 }
+
+fn pin(s: &str) -> SecureString {
+    SecureString::from_string(s.to_string())
+}
+
+#[test]
+fn test_validate_pin_rejects_five_characters() {
+    assert!(validate_pin(&pin("12345")).is_err());
+}
+
+#[test]
+fn test_validate_pin_accepts_six_characters() {
+    assert!(validate_pin(&pin("123456")).is_ok());
+}
+
+#[test]
+fn test_validate_pin_counts_characters_not_bytes() {
+    // Six two-byte characters: twelve bytes, but six characters.
+    assert!(validate_pin(&pin("ααββγγ")).is_ok());
+    assert!(validate_pin(&pin("ααββγ")).is_err());
+}
+
+#[test]
+fn test_validate_pin_rejects_empty() {
+    assert!(validate_pin(&pin("")).is_err());
+}
+
+#[test]
+fn test_validate_pin_allows_letters_and_symbols() {
+    assert!(validate_pin(&pin("a1!b2@")).is_ok());
+}

@@ -397,12 +397,13 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
     let pin = qpv2_core::pinentry::prompt_password_with_confirmation(
         "Set a PIN for this wallet.\n\
          • Protected by the TPM, which blocks repeated guesses\n\
-         • Six digits or more\n\
+         • Six characters or more\n\
          • Not your Windows sign-in PIN",
         "PIN:",
         "Confirm PIN:",
         "PINs do not match.",
     )?;
+    qpv2_core::utilities::validate_pin(&pin)?;
 
     let prov = open_provider()?;
     let hkey = open_seal_key(prov.0)?;

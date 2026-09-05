@@ -119,12 +119,13 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
     let pin = qpv2_core::pinentry::prompt_password_with_confirmation(
         "Set a PIN for this wallet.\n\
          • Protected by the TPM, which blocks repeated guesses\n\
-         • Six digits or more\n\
+         • Six characters or more\n\
          • Not your login password",
         "PIN:",
         "Confirm PIN:",
         "PINs do not match.",
     )?;
+    qpv2_core::utilities::validate_pin(&pin)?;
     let auth =
         Auth::try_from(pin.as_bytes().to_vec()).map_err(|e| format!("Invalid PIN: {}.", e))?;
 
