@@ -568,7 +568,7 @@ impl App {
             )
             .map(AuthKey::Password),
             Some(AuthMethod::Keychain) => {
-                keychain::retrieve_key(self.wallet_id).map(AuthKey::CryptoKey)
+                keychain::retrieve_key(self.wallet_id, purpose).map(AuthKey::CryptoKey)
             }
             Some(AuthMethod::Fido2 { credential_id }) => {
                 let cred_bytes = hex::decode(credential_id)
@@ -1047,7 +1047,7 @@ impl App {
     /// Unlock via the platform credential store, then transition to
     /// Unlocked.
     pub(crate) fn unlock_with_keychain(&mut self) {
-        match keychain::retrieve_key(self.wallet_id) {
+        match keychain::retrieve_key(self.wallet_id, "unlock this wallet") {
             Ok(_) => match KeyVault::get_all_accounts(self.wallet_id) {
                 Ok(accounts) => {
                     self.accounts = accounts;

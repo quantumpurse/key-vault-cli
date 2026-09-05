@@ -389,22 +389,24 @@ fn prompt_for_input(prompt: &str) -> Result<SecureString, String> {
     Ok(result)
 }
 
-fn get_auth_key(wallet_id: u32) -> Result<AuthKey, String> {
+fn get_auth_key(wallet_id: u32, purpose: &str) -> Result<AuthKey, String> {
     let wallet_info = KeyVault::read_wallet_info(wallet_id)?;
     match wallet_info.auth_method {
         AuthMethod::Password => {
-            let password = prompt_for_input("Enter password: ")?;
+            let password =
+                prompt_for_input(&format!("Enter your wallet password to {}: ", purpose))?;
             Ok(AuthKey::Password(password))
         }
         AuthMethod::Keychain => {
             println!("Authenticate with {}...", keychain::short_name());
-            let key = keychain::retrieve_key(wallet_id)?;
+            let key = keychain::retrieve_key(wallet_id, purpose)?;
             Ok(AuthKey::CryptoKey(key))
         }
         AuthMethod::Fido2 { ref credential_id } => {
             let cred_bytes =
                 hex::decode(credential_id).map_err(|e| format!("Invalid credential ID: {}", e))?;
-            let pin = prompt_for_input("Enter security key PIN: ")?;
+            let pin =
+                prompt_for_input(&format!("Enter your security key PIN to {}: ", purpose))?;
             let hmac_output = keychain::fido2::authenticate(&cred_bytes, &pin)?;
             let key = qpv2_core::utilities::derive_vault_enc_key(&hmac_output)?;
             Ok(AuthKey::CryptoKey(key))
@@ -717,7 +719,7 @@ fn handle_dao_deposit(
     let message = ckb_node::compute_signing_message(&unsigned_tx, &input_cells, 0)
         .map_err(|e| format!("Failed to compute tx message: {}", e))?;
 
-    let auth = get_auth_key(wallet_id)?;
+    let auth = get_auth_key(wallet_id, "deposit into Nervos DAO")?;
     let variant = KeyVault::get_spx_variant(wallet_id)?;
     let vault = KeyVault::new(variant, wallet_id);
     let signature_bytes = vault.ckb_sign(auth, lock_args.to_string(), message.to_vec())?;
@@ -768,7 +770,7 @@ fn handle_dao_prepare(
     let message = ckb_node::compute_signing_message(&unsigned_tx, &input_cells, 0)
         .map_err(|e| format!("Failed to compute tx message: {}", e))?;
 
-    let auth = get_auth_key(wallet_id)?;
+    let auth = get_auth_key(wallet_id, "request a DAO withdrawal")?;
     let variant = KeyVault::get_spx_variant(wallet_id)?;
     let vault = KeyVault::new(variant, wallet_id);
     let signature_bytes = vault.ckb_sign(auth, lock_args.to_string(), message.to_vec())?;
@@ -819,7 +821,7 @@ fn handle_dao_withdraw(
     let message = ckb_node::compute_signing_message(&unsigned_tx, &input_cells, 0)
         .map_err(|e| format!("Failed to compute tx message: {}", e))?;
 
-    let auth = get_auth_key(wallet_id)?;
+    let auth = get_auth_key(wallet_id, "complete the DAO withdrawal")?;
     let variant = KeyVault::get_spx_variant(wallet_id)?;
     let vault = KeyVault::new(variant, wallet_id);
     let signature_bytes = vault.ckb_sign(auth, lock_args.to_string(), message.to_vec())?;
@@ -895,7 +897,7 @@ fn handle_transfer(
     let signed_tx = if KeyVault::is_hardware_wallet(wallet_id) {
         sign_transfer_with_trezor(&account, &qp_client, is_mainnet, unsigned_tx)?
     } else {
-        let auth = get_auth_key(wallet_id)?;
+        let auth = get_auth_key(wallet_id, "sign and send the transfer")?;
         let variant = KeyVault::get_spx_variant(wallet_id)?;
         let vault = KeyVault::new(variant, wallet_id);
         let signature_bytes = vault.ckb_sign(auth, lock_args.to_string(), message.to_vec())?;
@@ -1194,7 +1196,7 @@ fn handle_msig_sign(wallet_id: u32, request_path: &str, output: &str) -> Result<
     let message_bytes = hex::decode(&request.signing_message)
         .map_err(|e| format!("Invalid signing message hex: {}", e))?;
 
-    let auth = get_auth_key(wallet_id)?;
+    let auth = get_auth_key(wallet_id, "co-sign a multisig transaction")?;
     let vault = KeyVault::new(variant, wallet_id);
 
     let (signature, _pubkey) = vault.raw_sign(auth, singlesig_lock_args, message_bytes)?;
@@ -1408,7 +1410,7 @@ fn main() -> Result<(), String> {
                 let variant = KeyVault::get_spx_variant(wallet_id)?;
                 let vault = KeyVault::new(variant, wallet_id);
 
-                let auth = get_auth_key(wallet_id)?;
+                let auth = get_auth_key(wallet_id, "export the seed phrase")?;
                 let seed_phrase = vault.export_seed_phrase(auth)?;
 
                 if let Some(output_path) = output {
@@ -1435,7 +1437,7 @@ fn main() -> Result<(), String> {
                     let variant = KeyVault::get_spx_variant(wallet_id)?;
                     let vault = KeyVault::new(variant, wallet_id);
 
-                    let auth = get_auth_key(wallet_id)?;
+                    let auth = get_auth_key(wallet_id, "create a new account")?;
                     let account = vault.gen_singlesig_account(auth)?;
                     println!("✓ New account created");
                     println!(
@@ -1528,7 +1530,7 @@ fn main() -> Result<(), String> {
                     let variant = KeyVault::get_spx_variant(wallet_id)?;
                     let vault = KeyVault::new(variant, wallet_id);
 
-                    let auth = get_auth_key(wallet_id)?;
+                    let auth = get_auth_key(wallet_id, "recover accounts")?;
                     let accounts = vault.recover_accounts(auth, count)?;
 
                     println!("✓ Recovered {} accounts:", accounts.len());
@@ -1541,7 +1543,7 @@ fn main() -> Result<(), String> {
                     let variant = KeyVault::get_spx_variant(wallet_id)?;
                     let vault = KeyVault::new(variant, wallet_id);
 
-                    let auth = get_auth_key(wallet_id)?;
+                    let auth = get_auth_key(wallet_id, "derive an account batch")?;
                     let accounts = vault.try_gen_account_batch(auth, start, count)?;
 
                     println!("Generated {} accounts:", accounts.len());
@@ -1561,7 +1563,7 @@ fn main() -> Result<(), String> {
             let vault = KeyVault::new(variant, wallet_id);
 
             let message_bytes = hex::decode(&message).map_err(|e| e.to_string())?;
-            let auth = get_auth_key(wallet_id)?;
+            let auth = get_auth_key(wallet_id, "sign the message")?;
 
             let (signature, pub_key) = vault.raw_sign(auth, identifier, message_bytes)?;
             println!("Signature: {}", hex::encode(signature));
@@ -1595,7 +1597,7 @@ fn main() -> Result<(), String> {
                 let vault = KeyVault::new(variant, wallet_id);
 
                 let message_bytes = hex::decode(&message).map_err(|e| e.to_string())?;
-                let auth = get_auth_key(wallet_id)?;
+                let auth = get_auth_key(wallet_id, "sign the CKB message")?;
 
                 let signature = vault.ckb_sign(auth, lock_args, message_bytes)?;
                 println!("Signature: {}", hex::encode(signature));

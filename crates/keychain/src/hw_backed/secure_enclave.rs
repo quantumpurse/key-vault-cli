@@ -41,7 +41,9 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
     set_generic_password_options(key, opts).map_err(map_err)
 }
 
-pub fn retrieve_key(wallet_id: u32) -> Result<SecureVec, String> {
+/// `purpose` is unused but specified for a unified api.
+pub fn retrieve_key(wallet_id: u32, purpose: &str) -> Result<SecureVec, String> {
+    let _ = purpose;
     let bytes = generic_password(protected_opts(wallet_id)).map_err(map_err)?;
     let secure = SecureVec::from_vec(bytes);
     if secure.len() != KEY_LEN {

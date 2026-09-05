@@ -395,7 +395,10 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
     }
 
     let pin = qpv2_core::pinentry::prompt_password_with_confirmation(
-        "Set a PIN for your wallet.",
+        "Set a PIN for this wallet.\n\
+         • Protected by the TPM, which blocks repeated guesses\n\
+         • Six digits or more\n\
+         • Not your Windows sign-in PIN",
         "PIN:",
         "Confirm PIN:",
         "PINs do not match.",
@@ -418,12 +421,15 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-pub fn retrieve_key(wallet_id: u32) -> Result<SecureVec, String> {
+pub fn retrieve_key(wallet_id: u32, purpose: &str) -> Result<SecureVec, String> {
     let path = sealed_blob_path(wallet_id)?;
     let blob =
         std::fs::read(&path).map_err(|e| format!("Failed to read {}: {}.", SEALED_BLOB_FILE, e))?;
 
-    let pin = qpv2_core::pinentry::prompt_password("Enter your PIN.", "PIN:")?;
+    let pin = qpv2_core::pinentry::prompt_password(
+        &format!("Enter your QPV2 TPM wallet PIN to {}.", purpose),
+        "PIN:",
+    )?;
 
     let prov = open_provider()?;
     let hkey = open_seal_key(prov.0)?;

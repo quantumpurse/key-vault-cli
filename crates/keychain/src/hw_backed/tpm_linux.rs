@@ -117,7 +117,10 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
     }
 
     let pin = qpv2_core::pinentry::prompt_password_with_confirmation(
-        "Set a PIN for your wallet.",
+        "Set a PIN for this wallet.\n\
+         • Protected by the TPM, which blocks repeated guesses\n\
+         • Six digits or more\n\
+         • Not your login password",
         "PIN:",
         "Confirm PIN:",
         "PINs do not match.",
@@ -164,7 +167,7 @@ fn seal_to_srk(
     write_sealed_blob(&sealed_blob_path(wallet_id)?, &private_bytes, &public_bytes)
 }
 
-pub fn retrieve_key(wallet_id: u32) -> Result<SecureVec, String> {
+pub fn retrieve_key(wallet_id: u32, purpose: &str) -> Result<SecureVec, String> {
     let (private_bytes, public_bytes) = read_sealed_blob(&sealed_blob_path(wallet_id)?)?;
 
     let private =
@@ -172,7 +175,10 @@ pub fn retrieve_key(wallet_id: u32) -> Result<SecureVec, String> {
     let public =
         Public::unmarshall(&public_bytes).map_err(|e| format!("Invalid public blob: {}.", e))?;
 
-    let pin = qpv2_core::pinentry::prompt_password("Enter your PIN.", "PIN:")?;
+    let pin = qpv2_core::pinentry::prompt_password(
+        &format!("Enter your QPV2 TPM wallet PIN to {}.", purpose),
+        "PIN:",
+    )?;
     let auth =
         Auth::try_from(pin.as_bytes().to_vec()).map_err(|e| format!("Invalid PIN: {}.", e))?;
 

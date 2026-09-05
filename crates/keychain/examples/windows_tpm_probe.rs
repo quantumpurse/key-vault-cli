@@ -114,7 +114,7 @@ fn store(secret: &[u8]) {
 #[cfg(target_os = "windows")]
 fn retrieve(secret: &[u8]) {
     println!("retrieve_key (unseals; asks for the same PIN)...");
-    match keychain::retrieve_key(WALLET_ID) {
+    match keychain::retrieve_key(WALLET_ID, "unseal the probe key") {
         Ok(got) if got.as_ref() == secret => println!("      ok — round-trip matches"),
         Ok(_) => {
             eprintln!("      FAILED: unsealed bytes differ from what was stored");
