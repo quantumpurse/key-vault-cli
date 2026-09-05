@@ -26,7 +26,7 @@
 //!
 //! Note this probe cannot tell you whether the provider is performing
 //! genuine TPM sealing rather than an RSA wrap — that question is settled
-//! by the `seal_is_not_rsa` test in `windows_tpm.rs`, and the whole
+//! by the `seal_is_not_rsa` test in `tpm_windows.rs`, and the whole
 //! post-quantum claim rests on it. Run that too:
 //!
 //!     cargo test -p keychain --lib -- --ignored --nocapture

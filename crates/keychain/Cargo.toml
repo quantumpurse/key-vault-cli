@@ -2,7 +2,7 @@
 name = "keychain"
 version = "0.1.0"
 edition = "2021"
-description = "Multi-platform credential storage for QuantumPurse."
+description = "Multi-platform secure dek storage for QuantumPurse."
 repository = "https://github.com/quantumpurse/quantum-purse-v2.git"
 license = "MIT"
 
@@ -23,7 +23,7 @@ windows-sys = { version = "0.61", features = [
 	"Win32_Foundation",
 	"Win32_Security_Cryptography",
 	# Reading the TPM's dictionary-attack counters means going below NCrypt,
-	# which does not expose them. See hw_backed::windows_tpm_lockout.
+	# which does not expose them. See hw_backed::tpm_lockout_windows.
 	"Win32_System_TpmBaseServices",
 ] }
 

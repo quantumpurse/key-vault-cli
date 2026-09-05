@@ -4,10 +4,10 @@
 //! through the Platform Crypto Provider's well-known seal key
 //! `TPM_RSA_SRK_SEAL_KEY`. The resulting blob is written to the wallet
 //! directory. A PIN is required to seal and to unseal, supplied as the
-//! seal password. This mirrors [`linux_tpm`](super::linux_tpm), which
+//! seal password. This mirrors [`tpm_linux`](super::tpm_linux), which
 //! seals through `tss-esapi`.
 
-use super::windows_tpm_lockout as lockout;
+use super::tpm_lockout_windows as lockout;
 use crate::KEY_LEN;
 use qpv2_core::SecureVec;
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ use windows_sys::Win32::Security::Cryptography::{
     TPM_RSA_SRK_SEAL_KEY,
 };
 
-/// Deliberately not the `tpm_sealed_blob.bin` that `linux_tpm.rs` writes.
+/// Deliberately not the `tpm_sealed_blob.bin` that `tpm_linux.rs` writes.
 /// The two formats are incompatible — Linux stores a length-prefixed
 /// TPM2B_PRIVATE plus a marshalled public area, this stores an opaque PCP
 /// blob — so a data directory carried between platforms should fail to
