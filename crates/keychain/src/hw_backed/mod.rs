@@ -1,6 +1,11 @@
 #[cfg(feature = "fido2")]
 pub mod fido2;
 
+// Shared by the two TPM backends. `test` keeps its unit tests running on
+// every platform, macOS included.
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+mod utils;
+
 #[cfg(target_os = "macos")]
 mod secure_enclave;
 #[cfg(target_os = "macos")]

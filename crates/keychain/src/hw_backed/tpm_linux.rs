@@ -11,14 +11,15 @@
 //! leaves the TPM in plaintext except during the unseal operation, and
 //! the sealed blob is useless on another machine.
 //!
-//! A PIN is required for both seal and unseal. The PIN is set as the
-//! TPM object's authValue during `TPM2_Create` and verified on-chip
-//! during `TPM2_Unseal`. Failed PIN attempts count toward the TPM's
-//! dictionary attack lockout. The caller collects the PIN (via
-//! pinentry or terminal input) and passes it in.
+//! A PIN is required for both seal and unseal. The PIN is expanded through
+//! HKDF to a 32-byte value (see `utils`), which is set as the TPM
+//! object's authValue during `TPM2_Create` and verified on-chip during
+//! `TPM2_Unseal`. Failed PIN attempts count toward the TPM's dictionary
+//! attack lockout.
 //!
 //! Requires `/dev/tpmrm0` (kernel resource manager).
 
+use super::utils::derive_seal_auth;
 use crate::KEY_LEN;
 use qpv2_core::SecureVec;
 use std::path::{Path, PathBuf};
@@ -47,6 +48,13 @@ fn sealed_blob_path(wallet_id: u32) -> Result<PathBuf, String> {
     qpv2_core::db::get_wallet_dir(wallet_id)
         .map(|d| d.join(SEALED_BLOB_FILE))
         .map_err(|e| e.to_string())
+}
+
+/// The auth value the chip checks: the PIN run through HKDF, the same
+/// construction as the Windows backend.
+fn get_auth(pin: &str) -> Result<Auth, String> {
+    Auth::try_from(derive_seal_auth(pin)?.to_vec())
+        .map_err(|e| format!("Invalid auth value: {}.", e))
 }
 
 fn open_context() -> Result<Context, String> {
@@ -126,8 +134,7 @@ pub fn store_key(wallet_id: u32, key: &[u8]) -> Result<(), String> {
         "PINs do not match.",
     )?;
     qpv2_core::utilities::validate_pin(&pin)?;
-    let auth =
-        Auth::try_from(pin.as_bytes().to_vec()).map_err(|e| format!("Invalid PIN: {}.", e))?;
+    let auth = get_auth(&pin)?;
 
     let mut context = open_context()?;
     let srk_handle = create_srk(&mut context)?;
@@ -180,8 +187,7 @@ pub fn retrieve_key(wallet_id: u32, purpose: &str) -> Result<SecureVec, String> 
         &format!("Enter your QPV2 TPM wallet PIN to {}.", purpose),
         "PIN:",
     )?;
-    let auth =
-        Auth::try_from(pin.as_bytes().to_vec()).map_err(|e| format!("Invalid PIN: {}.", e))?;
+    let auth = get_auth(&pin)?;
 
     let mut context = open_context()?;
     let srk_handle = create_srk(&mut context)?;

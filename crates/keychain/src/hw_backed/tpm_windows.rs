@@ -8,6 +8,7 @@
 //! seals through `tss-esapi`.
 
 use super::tpm_lockout_windows as lockout;
+use super::utils::{derive_seal_auth, TPM_AUTH_LEN};
 use crate::KEY_LEN;
 use qpv2_core::SecureVec;
 use std::path::PathBuf;
@@ -32,18 +33,6 @@ const SEALED_BLOB_FILE: &str = "pcp_sealed_blob.bin";
 
 /// TPM 2.0 caps a sealed object's payload at 128 bytes. Our key is 32.
 const MAX_SEAL_INPUT: usize = 128;
-
-/// A TPM authorization value is a `TPM2B_AUTH`, capped at the object's
-/// name-algorithm digest size — 32 bytes under SHA-256. Passing the PIN's
-/// bytes directly would silently truncate anything longer, so the PIN is
-/// run through HKDF to exactly that length instead. This also makes the
-/// value independent of how the PIN happens to be encoded.
-const TPM_AUTH_LEN: usize = 32;
-
-/// Domain separator for the seal authorization value. **Changing this
-/// makes every existing sealed blob permanently unopenable**, which is
-/// why it carries a version suffix rather than being edited in place.
-const TPM_AUTH_HKDF_INFO: &[u8] = b"quantum-purse-v2/tpm-seal-auth/v1";
 
 fn sealed_blob_path(wallet_id: u32) -> Result<PathBuf, String> {
     qpv2_core::db::get_wallet_dir(wallet_id)
@@ -254,14 +243,7 @@ struct SealAuth {
 
 impl SealAuth {
     fn new(pin: &str) -> Result<Self, String> {
-        if pin.is_empty() {
-            return Err("PIN cannot be empty.".to_string());
-        }
-        let value = qpv2_core::utilities::derive_hkdf_key(
-            pin.as_bytes(),
-            TPM_AUTH_HKDF_INFO,
-            TPM_AUTH_LEN,
-        )?;
+        let value = derive_seal_auth(pin)?;
         // Taken before `value` is moved into the struct: moving a
         // `SecureVec` moves the owning struct, not its heap allocation,
         // so the pointer stays valid.

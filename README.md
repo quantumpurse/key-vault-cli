@@ -225,8 +225,9 @@ family of operation BitLocker uses for its volume master key.
 ##### 3. Linux — TPM seal via `tss-esapi`
 
 The 32-byte vault encryption key is sealed under the TPM's Storage
-Root Key (SRK) using `TPM2_Create`. A user-chosen PIN of at least six characters is set as the
-sealed object's `authValue` during creation and verified on-chip
+Root Key (SRK) using `TPM2_Create`. A user-chosen PIN of at least six characters,
+expanded through HKDF-SHA256 to the 32-byte authorization value exactly as on
+Windows, is set as the sealed object's `authValue` during creation and verified on-chip
 during every unseal — failed attempts count toward the TPM's
 dictionary attack lockout. The sealed blobs (Private + Public) are
 persisted to `tpm_sealed_blob.bin` on disk. On unlock, the SRK is
