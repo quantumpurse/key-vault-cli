@@ -181,6 +181,14 @@ fn execute(mut command: Command, log_path: &Path) -> Result<Child, NodeManagerEr
         NodeManagerError::ProcessError(format!("Failed to clone log handle: {}", e))
     })?;
 
+    // Allow Windows to start the child ckb processes with no console - or
+    // "a console application that is being run without a console window"
+    // https://learn.microsoft.com/windows/win32/procthread/process-creation-flags
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
     command
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(log_file_err))
@@ -431,21 +439,27 @@ fn ensure_full_node_chain_dir(
 
     // Only run `ckb init` when the chain dir hasn't been scaffolded yet.
     if !toml_path.exists() {
-        let status = Command::new(binary)
+        let mut command = Command::new(binary);
+        command
             .arg("init")
             .arg("--chain")
             .arg(network.tag())
             .arg("-C")
-            .arg(data_dir)
-            .status()
-            .map_err(|e| {
-                NodeManagerError::ProcessError(format!(
-                    "Failed to run `ckb init --chain {} -C {}`: {}",
-                    network.tag(),
-                    data_dir.display(),
-                    e
-                ))
-            })?;
+            .arg(data_dir);
+        // No console window for a console child.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let status = command.status().map_err(|e| {
+            NodeManagerError::ProcessError(format!(
+                "Failed to run `ckb init --chain {} -C {}`: {}",
+                network.tag(),
+                data_dir.display(),
+                e
+            ))
+        })?;
 
         if !status.success() {
             return Err(NodeManagerError::ProcessError(format!(

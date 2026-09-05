@@ -1,5 +1,8 @@
 //! GUI for SPHINCS+ key vault with Passkey PRF / Touch ID support.
 
+// Release builds on Windows run without a console; debug builds keep it for `cargo run` output.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod fetcher;
 mod poller;
 mod qr_adoption;
