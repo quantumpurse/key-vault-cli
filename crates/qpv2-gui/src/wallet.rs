@@ -491,7 +491,7 @@ impl App {
     /// Create a password-mode wallet. Opens the pinentry dialog with
     /// a confirmation field — the dialog itself enforces the match
     /// (the user can't submit until both fields agree). On submit,
-    /// validates strength via `password_checker`, generates the
+    /// validates strength via `validate_password`, generates the
     /// master seed, derives the first account, and transitions to
     /// `Screen::Unlocked`. Cancellation surfaces as a quiet info
     /// banner; nothing else changes.
@@ -519,7 +519,7 @@ impl App {
             }
         };
 
-        let strength_str = match qpv2_core::utilities::password_checker(&pw) {
+        let strength_str = match qpv2_core::utilities::validate_password(&pw) {
             Ok(bits) => format!(" Password strength: {} bits.", bits),
             Err(e) => {
                 let msg = format!("Weak password: {}", e);
@@ -743,7 +743,7 @@ impl App {
             }
         };
 
-        let strength_str = match qpv2_core::utilities::password_checker(&pw) {
+        let strength_str = match qpv2_core::utilities::validate_password(&pw) {
             Ok(bits) => format!(" Password strength: {} bits.", bits),
             Err(e) => {
                 let msg = format!("Weak password: {}", e);

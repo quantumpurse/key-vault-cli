@@ -318,7 +318,7 @@ pub fn get_ckb_tx_message_all(serialized_mock_tx: Vec<u8>) -> Result<Vec<u8>, St
 ///
 /// **Returns**:
 /// - `Result<u32, String>` - The strength of the password measured in bit on success, or an error on failure.
-pub fn password_checker(password: &SecureString) -> Result<u32, String> {
+pub fn validate_password(password: &SecureString) -> Result<u32, String> {
     if password.is_empty() || password.is_uninitialized() {
         return Err("Password cannot be empty or uninitialized".to_string());
     }
@@ -448,7 +448,7 @@ pub fn parse_ckb_to_shannons(input: &str) -> Result<u64, String> {
 
 /// Fewest characters a hardware-backed PIN may have. Six is enough because
 /// the TPM throttles guesses in hardware; the floor exists so that throttling
-/// has something to protect. Compare `password_checker`, which guards a file
+/// has something to protect. Compare `validate_password`, which guards a file
 /// an attacker can brute-force offline and therefore demands far more.
 pub const MIN_PIN_CHARS: usize = 6;
 

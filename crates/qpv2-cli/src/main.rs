@@ -1334,7 +1334,7 @@ fn main() -> Result<(), String> {
                     return Err("Passwords do not match".to_string());
                 }
 
-                match qpv2_core::utilities::password_checker(&password) {
+                match qpv2_core::utilities::validate_password(&password) {
                     Ok(strength) => println!("Password strength: {} bits", strength),
                     Err(e) => {
                         return Err(format!("Password validation failed: {}", e));
@@ -1387,7 +1387,7 @@ fn main() -> Result<(), String> {
                         return Err("Passwords do not match".to_string());
                     }
 
-                    match qpv2_core::utilities::password_checker(&password) {
+                    match qpv2_core::utilities::validate_password(&password) {
                         Ok(strength) => println!("Password strength: {} bits", strength),
                         Err(e) => {
                             return Err(format!("Password validation failed: {}", e));
