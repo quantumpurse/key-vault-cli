@@ -27,7 +27,7 @@ use wallet::{load_last_wallet_id, save_last_wallet_id};
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How long a non-None status banner stays visible before auto-clearing.
-const STATUS_DURATION: Duration = Duration::from_secs(5);
+const STATUS_DURATION: Duration = Duration::from_secs(15);
 
 /// Cadence for rebuilding the QR-lock adoption series — it pages every
 /// live QR cell, so refresh sparingly; the data is weekly-grained.
