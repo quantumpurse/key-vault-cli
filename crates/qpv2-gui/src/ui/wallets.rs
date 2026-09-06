@@ -7,9 +7,7 @@ use qpv2_core::KeyVault;
 
 use super::accounts::{header_cell, table_rule};
 use super::utils::truncate_middle;
-use super::utils::{
-    accent_button, badge, breathing_dot, ghost_button, panel_frame, row_hover, section_header,
-};
+use super::utils::{badge, breathing_dot, ghost_button, panel_frame, row_hover, section_header};
 use crate::types::{display_font, label_font, Status};
 use crate::App;
 
@@ -57,7 +55,7 @@ impl App {
                     ui.set_width(ui.available_width());
 
                     ui.horizontal(|ui| {
-                        // NEW WALLET (solid accent) + IMPORT / EXPORT SEED (ghost).
+                        // Wallet actions share the same ghost-button treatment.
                         let btns_w = 120.0 + 80.0 + 110.0 + 3.0 * 8.0;
                         let header_w = (ui.available_width() - btns_w).max(0.0);
                         ui.allocate_ui_with_layout(
@@ -93,7 +91,7 @@ impl App {
                             self.import_from_v1 = false;
                         }
                         let create =
-                            accent_button(&self.colors, "NEW WALLET", egui::vec2(120.0, 24.0));
+                            ghost_button(&self.colors, "NEW WALLET", egui::vec2(120.0, 24.0));
                         if ui.add(create).clicked() {
                             self.wallet_modal = crate::types::WalletModal::Create;
                             self.new_wallet_name.clear();
