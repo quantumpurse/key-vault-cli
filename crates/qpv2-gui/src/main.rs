@@ -597,6 +597,10 @@ impl eframe::App for App {
         self.poll_device_status();
         self.poll_trezor_reconnect();
 
+        // The node is spawned in `App::new`, before any wallet is open,
+        // so a child that dies on startup is reported here.
+        self.poll_local_node_liveness();
+
         if self.screen == Screen::Unlocked {
             self.poll_all_balances();
             self.poll_transaction_build();
