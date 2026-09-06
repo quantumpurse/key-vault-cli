@@ -242,8 +242,15 @@ pub(crate) struct NodeStatus {
     /// Local node identity (version, node ID, connections, protocols).
     /// `None` for public RPC (no local process).
     pub local_node_info: Option<ckb_jsonrpc_types::LocalNode>,
-    /// True when the most recent poll reached the node successfully.
+    /// True when the most recent poll reached the node and the node is on
+    /// the configured network.
     pub online: bool,
+    /// The chain the node reports when it is not the configured network,
+    /// e.g. `Mainnet`. `online` stays false while this is set.
+    pub network_mismatch: Option<String>,
+    /// Caching network verification. True once the genesis check passed on
+    /// this connection; the next poll skips the check while it holds.
+    pub network_verified: bool,
     /// Per-script sync status from the LC's `get_scripts`. Each entry is
     /// `(lock_args_hex, block_number)`. Empty for non-LC backends.
     pub tracked_scripts: Vec<(String, u64)>,

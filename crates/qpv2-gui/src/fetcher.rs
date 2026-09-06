@@ -733,9 +733,9 @@ impl App {
     /// - `Ok(Some(v))` / `Ok(None)` → trust the RPC's answer.
     /// - `Err(_)` → keep the last-known value.
     ///
-    /// `online` reflects *this poll's* reachability via `get_tip_header`,
-    /// so the status pill flips correctly during a blip even though the
-    /// metric tiles hold their values.
+    /// `online` reflects *this poll's* reachability via `get_tip_header`
+    /// and the genesis check, so the status pill flips correctly during a
+    /// blip even though the metric tiles hold their values.
     pub(crate) fn fetch_node_status(&mut self) {
         if self.node_status_rx.is_some() {
             return;
@@ -755,11 +755,31 @@ impl App {
             // *this poll's* reachability, but the displayed `tip_block`
             // falls back to cached so transient errors don't flicker.
             let tip_result = qp_client.get_tip_header();
-            let online = tip_result.is_ok();
+            let reachable = tip_result.is_ok();
             let tip_header: Option<ckb_types::core::HeaderView> = match tip_result {
                 Ok(h) => Some(h.into()),
                 Err(_) => cached.tip_header.clone(),
             };
+
+            // A reachable port proves nothing about the chain behind it,
+            // so the genesis check runs on every reconnect.
+            let (network_verified, network_mismatch) = if !reachable {
+                (false, None)
+            } else if cached.network_verified {
+                (true, None)
+            } else {
+                match qp_client.assert_configured_network() {
+                    Ok(()) => (true, None),
+                    Err(ckb_node::error::NodeManagerError::NetworkMismatch {
+                        detected, ..
+                    }) => (false, Some(detected)),
+                    Err(e) => {
+                        tracing::warn!("Network check failed, retrying next poll: {}", e);
+                        (false, cached.network_mismatch.clone())
+                    }
+                }
+            };
+            let online = reachable && network_verified;
 
             let peers = match qp_client.get_peers() {
                 Ok(p) => p,
@@ -847,6 +867,8 @@ impl App {
                 tx_pool_info,
                 local_node_info,
                 online,
+                network_mismatch,
+                network_verified,
             };
             let _ = tx.send(Ok(status) as NodeStatusUpdate);
         });

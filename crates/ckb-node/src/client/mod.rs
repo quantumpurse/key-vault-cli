@@ -421,8 +421,8 @@ impl QpClient {
         self.unified_client.get_genesis_block()
     }
 
-    /// Checks that the node serves the configured network.
-    pub fn verify_network(&self) -> Result<(), NodeManagerError> {
+    /// Checks that connected network matches the wallet's configured network.
+    pub fn assert_configured_network(&self) -> Result<(), NodeManagerError> {
         self.config
             .network
             .verify_genesis(&self.unified_client.get_genesis_hash()?)

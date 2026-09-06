@@ -23,14 +23,23 @@ impl App {
                 // ── Screen header + network toggle ──────────
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.label(
-                            egui::RichText::new("NETWORKS")
-                                .font(display_font(16.0))
-                                .color(self.colors.text),
-                        );
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("NETWORKS")
+                                    .font(display_font(16.0))
+                                    .color(self.colors.text),
+                            );
+                            if let Some((text, color)) = self.foreign_node_note() {
+                                ui.label(
+                                    egui::RichText::new(format!("({})", text))
+                                        .size(13.0)
+                                        .color(color),
+                                );
+                            }
+                        });
                         ui.add_space(2.0);
                         ui.label(
-                            egui::RichText::new("Configure and monitor the CKB node backend.")
+                            egui::RichText::new("Configure and monitor your CKB node.")
                                 .size(11.0)
                                 .color(self.colors.text_muted),
                         );
@@ -427,15 +436,51 @@ impl App {
         backend: NodeType,
         active: bool,
     ) -> (&'static str, egui::Color32, bool) {
+        let is_local_node = backend != NodeType::PublicRpc;
         if !active {
             ("STANDBY", self.colors.text_muted, false)
+        } else if is_local_node && !self.local_node.has_local_process() {
+            // Whatever else answers on the port is reported by `foreign_node_note`.
+            ("OFFLINE", self.colors.danger, true)
         } else if self.node_status.online {
             ("ONLINE", self.colors.accent2, false)
-        } else if backend != NodeType::PublicRpc && self.local_node.has_local_process() {
+        } else if is_local_node {
             ("STARTING", self.colors.warn, true)
         } else {
             ("OFFLINE", self.colors.danger, true)
         }
+    }
+
+    /// Heading note for when QPV2 is talking to a node it did not start:
+    /// a local backend is selected, its own child is gone, and the port
+    /// still answers. Red when that node is on another chain.
+    fn foreign_node_note(&self) -> Option<(String, egui::Color32)> {
+        if self.qp_client.config().node_type == NodeType::PublicRpc
+            || self.local_node.has_local_process()
+        {
+            return None;
+        }
+        let port = self.node_status.rpc_port?;
+        let network = self.qp_client.network();
+        if let Some(detected) = &self.node_status.network_mismatch {
+            return Some((
+                format!(
+                    "Foreign {} node detected at port {}",
+                    detected, port
+                ),
+                self.colors.warn,
+            ));
+        }
+        if self.node_status.online {
+            return Some((
+                format!(
+                    "Foreign {} node detected at port {}",
+                    network, port
+                ),
+                self.colors.warn,
+            ));
+        }
+        None
     }
 
     // ── Tracked scripts ──────────────────────────────────────
