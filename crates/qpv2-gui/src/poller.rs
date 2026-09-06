@@ -699,6 +699,35 @@ impl App {
         }
     }
 
+    /// Checking if the seed export dialog is still open.
+    /// If it is closed, we clear the channel and update the status.
+    pub(crate) fn poll_is_seed_export_dialog_up(&mut self) {
+        let rx = match &self.seed_export_dialog_done_rx {
+            Some(rx) => rx,
+            None => return,
+        };
+        match rx.try_recv() {
+            Ok(Ok(())) => {
+                // user closed the dialog
+                self.seed_export_dialog_done_rx = None;
+            }
+            Ok(Err(e)) => {
+                self.seed_export_dialog_done_rx = None;
+                tracing::error!("{}", e);
+                self.status = Status::Error(e);
+            }
+            Err(mpsc::TryRecvError::Empty) => {
+                // the dialog is still open
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.seed_export_dialog_done_rx = None;
+                let msg = "Seed export thread terminated unexpectedly.".to_string();
+                tracing::error!("{}", msg);
+                self.status = Status::Error(msg);
+            }
+        }
+    }
+
     /// Pick up a freshly built QR-lock adoption series. Failures are
     /// logged and rescheduled on the short retry cadence so a transient
     /// public-RPC error doesn't strand the UI in "Querying..." for the

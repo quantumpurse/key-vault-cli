@@ -212,6 +212,9 @@ pub(crate) struct App {
     // button waits and tells the user to look at the device, since a locked
     // Trezor holds the handshake open until its PIN is entered.
     pub(crate) trezor_import_rx: Option<mpsc::Receiver<TrezorImportUpdate>>,
+    // How the seed-export thread tells the main UI thread it is done. Some while
+    // that thread owns the pinentry dialog; the overlay locks the wallet meanwhile.
+    pub(crate) seed_export_dialog_done_rx: Option<mpsc::Receiver<Result<(), String>>>,
     // ── Trezor link status (device-backed wallets only) ──
     // What the last probe saw. Never a live connection: the host opens a THP
     // session per operation, so this is polled presence, not a held link.
@@ -518,6 +521,7 @@ impl App {
             // doesn't need it; Locked screen reads it before rendering.
             auth_method,
             trezor_import_rx: None,
+            seed_export_dialog_done_rx: None,
             device_status: trezor_connect::DeviceStatus::Working,
             device_status_rx: None,
             device_status_probed_at: None,
@@ -603,6 +607,7 @@ impl eframe::App for App {
             self.poll_node_status();
             self.poll_earliest_funding_block();
             self.poll_qr_adoption();
+            self.poll_is_seed_export_dialog_up();
         }
 
         // Periodic refresh of balances, transaction history, DAO cells,
@@ -634,6 +639,7 @@ impl eframe::App for App {
         self.show_wallet_modal(&ctx);
         self.show_multisig_modal(&ctx);
         self.show_dao_deposit_modal(&ctx);
+        self.show_seed_export_blocking_overlay(&ctx);
 
         // Polling main stages of the wallet.
         match self.screen.clone() {
@@ -669,10 +675,11 @@ impl eframe::App for App {
 
         if async_pending {
             ctx.request_repaint();
-        } else if self.trezor_import_rx.is_some() {
+        } else if self.trezor_import_rx.is_some() || self.seed_export_dialog_done_rx.is_some() {
             // A frame is what checks the channel, so the repaint rate is the
-            // poll rate. This wait is human-paced — someone typing a PIN on
-            // the device — so checking 20 times a second instead of every
+            // poll rate. These waits are human-paced — someone typing a PIN on
+            // the device, or reading a seed phrase in the secure dialog — so
+            // checking 20 times a second instead of every
             // frame loses nothing and saves the CPU/GPU of rendering
             // thousands of identical frames over several minutes. The other
             // async operations above are network calls that finish in

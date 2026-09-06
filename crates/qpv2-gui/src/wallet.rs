@@ -787,6 +787,9 @@ impl App {
     }
 
     pub(crate) fn export_seed_phrase(&mut self) {
+        if self.seed_export_dialog_done_rx.is_some() {
+            return;
+        }
         let auth = match self.resolve_auth_key("export the seed phrase") {
             Ok(a) => a,
             Err(e) => {
@@ -805,22 +808,29 @@ impl App {
                 return;
             }
         };
-        let vault = KeyVault::new(variant, self.wallet_id);
-        match vault.export_seed_phrase(auth) {
-            Ok(phrase) => {
-                if let Err(e) = qpv2_core::pinentry::show_seed_phrase(&phrase) {
-                    tracing::error!("{}", e);
-                    self.status = Status::Error(e);
-                } else {
-                    tracing::info!("Seed phrase exported (wallet_id={})", self.wallet_id);
-                }
-            }
+        let phrase = match KeyVault::new(variant, self.wallet_id).export_seed_phrase(auth) {
+            Ok(p) => p,
             Err(e) => {
                 let msg = format!("Failed to export seed phrase: {}", e);
                 tracing::error!("{}", msg);
                 self.status = Status::Error(msg);
+                return;
             }
-        }
+        };
+
+        let wallet_id = self.wallet_id;
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.seed_export_dialog_done_rx = Some(rx);
+
+        // `phrase` moves into the thread, one owner throughout, and is wiped
+        // there when the dialog closes. Only the outcome comes back.
+        std::thread::spawn(move || {
+            let result = qpv2_core::pinentry::show_seed_phrase(&phrase);
+            if result.is_ok() {
+                tracing::info!("Seed phrase exported (wallet_id={})", wallet_id);
+            }
+            let _ = tx.send(result);
+        });
     }
 
     /// Create a Keychain wallet. Generates a random 32-byte key,

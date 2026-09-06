@@ -13,12 +13,14 @@
 //! There is no `$PATH` fallback by design, so dev and release exercise
 //! the same resolution path.
 //!
-//! `interact()` blocks the calling thread for the duration of the
-//! dialog. Called from the egui update loop — frames freeze while the
-//! modal is up. Acceptable: the user is interacting with the dialog,
-//! not the wallet UI, and the GUI's per-frame async pollers don't
-//! drive any time-critical work that would suffer from a few seconds
-//! of pause.
+//! Every call in this module blocks the calling thread until the dialog
+//! closes: each Assuan command waits on the child's reply, and pinentry
+//! replies to the final one only when the user presses a button. A prompt
+//! answered in a few seconds can run on the egui update loop; one the user
+//! may sit in for minutes, such as the seed-phrase display, must not:
+//! Windows reports a window hung after about five seconds without frames.
+//! Such prompts run on a worker thread and the GUI shows a locking overlay
+//! meanwhile (see `App::export_seed_phrase`).
 
 use crate::SecureString;
 use pinentry::{Error as PinentryError, MessageDialog, PassphraseInput};

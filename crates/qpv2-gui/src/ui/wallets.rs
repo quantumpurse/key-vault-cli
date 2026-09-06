@@ -7,7 +7,9 @@ use qpv2_core::KeyVault;
 
 use super::accounts::{header_cell, table_rule};
 use super::utils::truncate_middle;
-use super::utils::{accent_button, badge, ghost_button, panel_frame, row_hover, section_header};
+use super::utils::{
+    accent_button, badge, breathing_dot, ghost_button, panel_frame, row_hover, section_header,
+};
 use crate::types::{display_font, label_font, Status};
 use crate::App;
 
@@ -469,5 +471,49 @@ impl App {
             // Released early: disarm so the next press starts from zero.
             ui.ctx().memory_mut(|m| m.data.remove::<f64>(del_id));
         }
+    }
+}
+
+/// Width of the notice shown while a seed export is in flight.
+const SEED_EXPORT_NOTICE_W: f32 = 420.0;
+
+impl App {
+    /// Drawn while a seed export pinentry dialog is in flight.
+    pub(crate) fn show_seed_export_blocking_overlay(&self, ctx: &egui::Context) {
+        if self.seed_export_dialog_done_rx.is_none() {
+            return;
+        }
+
+        // Using egui modal for the overlay.
+        egui::Modal::new(egui::Id::new("seed_export_blocking_overlay"))
+            .backdrop_color(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 180))
+            .frame(
+                egui::Frame::new()
+                    .fill(self.colors.surface)
+                    .stroke(egui::Stroke::new(1.0, self.colors.border2))
+                    .inner_margin(egui::Margin::symmetric(20, 18)),
+            )
+            .show(ctx, |ui| {
+                ui.set_width(SEED_EXPORT_NOTICE_W);
+                ui.horizontal(|ui| {
+                    let t = ui.input(|i| i.time) as f32;
+                    let (dot, _) =
+                        ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                    breathing_dot(ui.painter(), dot.center(), self.colors.warn, t, true);
+                    ui.label(
+                        egui::RichText::new("SEED PHRASE OPEN IN THE SECURE DIALOG")
+                            .font(label_font(12.0))
+                            .color(self.colors.warn),
+                    );
+                });
+                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new(
+                        "Read it there. Close that dialog to return to the wallet.",
+                    )
+                    .size(12.0)
+                    .color(self.colors.text_muted),
+                );
+            });
     }
 }

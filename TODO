@@ -1,1 +1,2 @@
 * disallow importing existing seed
+* authentication currently blocks(keychain, pin, password). Move them to the background threads and send back the wallet seed makes for a better ux(no blocking), but its complication tradeoff is to be considered.
