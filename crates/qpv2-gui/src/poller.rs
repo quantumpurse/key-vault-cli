@@ -433,9 +433,9 @@ impl App {
     /// possible that this child process exit for some reasons e.g. port conflict.
     pub(crate) fn poll_local_node_liveness(&mut self) {
         if self.local_node.has_local_process() && !self.local_node.is_alive() {
-            tracing::error!("Local node exited unexpectedly.");
+            tracing::error!("Local node failed to start.");
             self.status = Status::Error(
-                "Local node exited unexpectedly.".to_string(),
+                "Local node failed to start.".to_string(),
             );
             self.local_node.stop();
         }
