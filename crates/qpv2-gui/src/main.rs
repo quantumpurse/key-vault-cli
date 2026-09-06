@@ -641,6 +641,15 @@ impl eframe::App for App {
         self.show_dao_deposit_modal(&ctx);
         self.show_seed_export_blocking_overlay(&ctx);
 
+        // The seed phrase pinentry dialog is a separate process with its own copy of
+        // the phrase. If the app exits now, the dialog outlives it with
+        // nothing left to lock it. Refuse to close until the user is done.
+        if self.seed_export_dialog_done_rx.is_some()
+            && ctx.input(|i| i.viewport().close_requested())
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+
         // Polling main stages of the wallet.
         match self.screen.clone() {
             Screen::Setup => {
