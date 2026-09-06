@@ -1,4 +1,5 @@
 use crate::error::NodeManagerError;
+use ckb_types::{h256, H256};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{self, File};
@@ -12,6 +13,13 @@ const PUBLIC_RPC_TESTNET: &str = "https://testnet.ckb.dev";
 /// Default local RPC ports.
 const LOCAL_RPC_FULL_NODE: &str = "http://127.0.0.1:8114";
 const LOCAL_RPC_LIGHT_CLIENT: &str = "http://127.0.0.1:9000";
+
+/// Genesis block hashes: fixed, public, and the one thing that tells one
+/// chain from another. Values come from `ckb list-hashes -b`.
+const GENESIS_HASH_MAINNET: H256 =
+    h256!("0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5");
+const GENESIS_HASH_TESTNET: H256 =
+    h256!("0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606");
 
 /// The type of CKB node backend to connect to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +58,35 @@ impl NetworkType {
         match self {
             NetworkType::Mainnet => "mainnet",
             NetworkType::Testnet => "testnet",
+        }
+    }
+
+    /// The network whose genesis block has this hash. `None` for a chain
+    /// the wallet does not know, such as a dev or preview net.
+    fn from_genesis_hash(hash: &H256) -> Option<NetworkType> {
+        if *hash == GENESIS_HASH_MAINNET {
+            Some(NetworkType::Mainnet)
+        } else if *hash == GENESIS_HASH_TESTNET {
+            Some(NetworkType::Testnet)
+        } else {
+            None
+        }
+    }
+
+    /// Checks that a node reporting `genesis` is on this network. A node
+    /// answering at the configured port proves nothing about the chain
+    /// behind it, so every backend passes this before it is trusted.
+    pub(crate) fn verify_genesis(&self, genesis: &H256) -> Result<(), NodeManagerError> {
+        match NetworkType::from_genesis_hash(genesis) {
+            Some(detected) if detected == *self => Ok(()),
+            Some(detected) => Err(NodeManagerError::NetworkMismatch {
+                expected: *self,
+                detected: detected.to_string(),
+            }),
+            None => Err(NodeManagerError::NetworkMismatch {
+                expected: *self,
+                detected: format!("an unknown chain (genesis {:#x})", genesis),
+            }),
         }
     }
 }
@@ -202,4 +239,61 @@ fn config_file_path() -> Result<PathBuf, NodeManagerError> {
         .join("quantum-purse")
         .join("node")
         .join("node_config.json"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NetworkType, GENESIS_HASH_MAINNET, GENESIS_HASH_TESTNET};
+    use ckb_types::H256;
+
+    #[test]
+    fn genesis_hashes_map_to_their_network() {
+        assert_eq!(
+            NetworkType::from_genesis_hash(&GENESIS_HASH_MAINNET),
+            Some(NetworkType::Mainnet)
+        );
+        assert_eq!(
+            NetworkType::from_genesis_hash(&GENESIS_HASH_TESTNET),
+            Some(NetworkType::Testnet)
+        );
+    }
+
+    #[test]
+    fn unknown_genesis_maps_to_none() {
+        assert_eq!(NetworkType::from_genesis_hash(&H256::default()), None);
+    }
+
+    #[test]
+    fn verify_genesis_accepts_own_chain() {
+        assert!(NetworkType::Mainnet
+            .verify_genesis(&GENESIS_HASH_MAINNET)
+            .is_ok());
+        assert!(NetworkType::Testnet
+            .verify_genesis(&GENESIS_HASH_TESTNET)
+            .is_ok());
+    }
+
+    #[test]
+    fn verify_genesis_names_both_networks_on_mismatch() {
+        let err = NetworkType::Testnet
+            .verify_genesis(&GENESIS_HASH_MAINNET)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "The node is on Mainnet, but the wallet is set to Testnet."
+        );
+    }
+
+    #[test]
+    fn verify_genesis_reports_unknown_chain() {
+        let err = NetworkType::Mainnet
+            .verify_genesis(&H256::default())
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("The node is on an unknown chain"),
+            "{}",
+            err
+        );
+    }
 }

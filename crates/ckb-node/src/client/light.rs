@@ -278,6 +278,12 @@ impl UnifiedClient for LightClient {
         })
     }
 
+    /// The light client has no hash-by-number RPC, so this pulls the
+    /// whole genesis block. Callers keep the result per connection.
+    fn get_genesis_hash(&self) -> Result<H256, NodeManagerError> {
+        self.get_genesis_block().map(|block| block.header.hash)
+    }
+
     fn get_cells_capacity(
         &self,
         search_key: SearchKey,

@@ -186,6 +186,15 @@ impl UnifiedClient for FullNodeClient {
             .ok_or_else(|| NodeManagerError::RpcError("Genesis block not found.".to_string()))
     }
 
+    fn get_genesis_hash(&self) -> Result<H256, NodeManagerError> {
+        self.client
+            .get_block_hash(0u64.into())
+            .map_err(|e| {
+                NodeManagerError::RpcError(format!("Failed to fetch genesis hash: {}", e))
+            })?
+            .ok_or_else(|| NodeManagerError::RpcError("Genesis block not found.".to_string()))
+    }
+
     fn get_cells_capacity(
         &self,
         search_key: SearchKey,

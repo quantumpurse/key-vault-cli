@@ -1,3 +1,4 @@
+use crate::config::NetworkType;
 use std::io;
 
 /// Errors that can occur during node management operations.
@@ -22,6 +23,14 @@ pub enum NodeManagerError {
     /// Operation requires a running node but none is active.
     #[error("No node is currently running")]
     NotRunning,
+
+    /// The node at the endpoint serves a different chain than the
+    /// wallet is configured for.
+    #[error("The node is on {detected}, but the wallet is set to {expected}.")]
+    NetworkMismatch {
+        expected: NetworkType,
+        detected: String,
+    },
 
     /// Operation is not applicable to the current node type (e.g. starting a process for PublicRpc).
     #[error("Operation not supported for node type '{node_type}': {reason}")]

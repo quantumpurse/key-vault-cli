@@ -111,6 +111,11 @@ trait UnifiedClient: Send + Sync + Any {
     /// `CellDepResolver` for transaction building.
     fn get_genesis_block(&self) -> Result<ckb_jsonrpc_types::BlockView, NodeManagerError>;
 
+    /// Returns the genesis block hash, which identifies the chain the
+    /// node serves. Cheap on a full node; the light client has to pull
+    /// the whole genesis block.
+    fn get_genesis_hash(&self) -> Result<H256, NodeManagerError>;
+
     /// Returns the total capacity of live cells matching the search key.
     fn get_cells_capacity(
         &self,
@@ -414,6 +419,13 @@ impl QpClient {
     /// `CellDepResolver` for transaction building.
     pub fn get_genesis_block(&self) -> Result<ckb_jsonrpc_types::BlockView, NodeManagerError> {
         self.unified_client.get_genesis_block()
+    }
+
+    /// Checks that the node serves the configured network.
+    pub fn verify_network(&self) -> Result<(), NodeManagerError> {
+        self.config
+            .network
+            .verify_genesis(&self.unified_client.get_genesis_hash()?)
     }
 
     /// Submits a transaction to the network and returns its hash.
