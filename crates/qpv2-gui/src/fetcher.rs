@@ -765,7 +765,8 @@ impl App {
 
             // A reachable port proves nothing about the chain behind it,
             // so the genesis check runs on every reconnect.
-            let (network_verified, network_mismatch) = if !reachable {
+            // TODO: hard to read, refactor.
+            let (network_verified, mismatched_network) = if !reachable {
                 (false, None)
             } else if cached.network_verified {
                 (true, None)
@@ -777,7 +778,7 @@ impl App {
                     }) => (false, Some(detected)),
                     Err(e) => {
                         tracing::warn!("Network check failed, retrying next poll: {}", e);
-                        (false, cached.network_mismatch.clone())
+                        (false, cached.mismatched_network.clone())
                     }
                 }
             };
@@ -869,7 +870,7 @@ impl App {
                 tx_pool_info,
                 local_node_info,
                 online,
-                network_mismatch,
+                mismatched_network,
                 network_verified,
             };
             let _ = tx.send(Ok(status) as NodeStatusUpdate);

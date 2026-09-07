@@ -21,6 +21,9 @@ impl App {
                 ui.set_width(ui.available_width() - 24.0);
 
                 // ── Screen header + network toggle ──────────
+                // While a foreign node holds the port, this page reports
+                // that node instead of one QPV2 manages
+                let foreign_node = self.foreign_node();
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
@@ -29,24 +32,44 @@ impl App {
                                     .font(display_font(16.0))
                                     .color(self.colors.text),
                             );
-                            if let Some((text, color)) = self.foreign_node_note() {
+                            if let Some((backend, network)) = &foreign_node {
+                                let backend = match backend {
+                                    NodeType::LightClient => "light node",
+                                    NodeType::FullNode => "full node",
+                                    NodeType::PublicRpc => "remote node",
+                                };
+                                let network = match network.as_str() {
+                                    "Mainnet" => "mainnet",
+                                    "Testnet" => "testnet",
+                                    other => other,
+                                };
                                 ui.label(
-                                    egui::RichText::new(format!("({})", text))
-                                        .size(13.0)
-                                        .color(color),
+                                    egui::RichText::new(format!(
+                                        "(foreign - {} {})",
+                                        backend, network
+                                    ))
+                                    .font(display_font(12.0))
+                                    .color(self.colors.warn),
                                 );
                             }
                         });
                         ui.add_space(2.0);
+                        let subtitle = if foreign_node.is_some() {
+                            "Configure and monitor foreign CKB node."
+                        } else {
+                            "Configure and monitor your CKB node."
+                        };
                         ui.label(
-                            egui::RichText::new("Configure and monitor your CKB node.")
+                            egui::RichText::new(subtitle)
                                 .size(11.0)
                                 .color(self.colors.text_muted),
                         );
                     });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        self.draw_network_toggle(ui);
-                    });
+                    if foreign_node.is_none() {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            self.draw_network_toggle(ui);
+                        });
+                    }
                 });
 
                 ui.add_space(14.0);
@@ -440,7 +463,7 @@ impl App {
         if !active {
             ("STANDBY", self.colors.text_muted, false)
         } else if is_local_node && !self.local_node.has_local_process() {
-            // Whatever else answers on the port is reported by `foreign_node_note`.
+            // Whatever else answers on the port is reported by `foreign_node`.
             ("OFFLINE", self.colors.danger, true)
         } else if self.node_status.online {
             ("ONLINE", self.colors.accent2, false)
@@ -451,30 +474,27 @@ impl App {
         }
     }
 
-    /// Heading note for when QPV2 is talking to a node it did not start:
-    /// a local backend is selected, its own child is gone, and the port
-    /// still answers. Red when that node is on another chain.
-    fn foreign_node_note(&self) -> Option<(String, egui::Color32)> {
-        if self.qp_client.config().node_type == NodeType::PublicRpc
-            || self.local_node.has_local_process()
-        {
+    /// Detects a node QPV2 did not start answering on its port: a local
+    /// backend is selected, no child of its own is running, and the last
+    /// poll reached a node on either chain. Returns that node's backend
+    /// and network, or `None` when there is no such node.
+    pub(crate) fn foreign_node(&self) -> Option<(NodeType, String)> {
+        let cfg = self.qp_client.config();
+        if cfg.node_type == NodeType::PublicRpc || self.local_node.has_local_process() {
             return None;
         }
-        let port = self.node_status.rpc_port?;
-        let network = self.qp_client.config().network;
-        if let Some(detected) = &self.node_status.network_mismatch {
-            return Some((
-                format!("Foreign {} node detected at port {}", detected, port),
-                self.colors.warn,
-            ));
-        }
-        if self.node_status.online {
-            return Some((
-                format!("Foreign {} node detected at port {}", network, port),
-                self.colors.warn,
-            ));
-        }
-        None
+
+        // node_status is wired to the port. So when no local node(and not public rpc) is running,
+        // here we check if the network on the port is the same as the configured network.
+        let foreign_network = match &self.node_status.mismatched_network {
+            // foreign node but different than the qp's configured network.
+            Some(detected) => detected.clone(),
+            // foreign node and the same as the qp's configured network.
+            None if self.node_status.online => cfg.network.to_string(),
+            // no foreign node detected on the port.
+            None => return None,
+        };
+        Some((cfg.node_type, foreign_network))
     }
 
     // ── Tracked scripts ──────────────────────────────────────

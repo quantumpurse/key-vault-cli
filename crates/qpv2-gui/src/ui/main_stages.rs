@@ -185,8 +185,14 @@ impl App {
         } else {
             self.colors.warn
         };
+        // A foreign node on the port is named as what it is, and the
+        // selector is locked: the network it would offer to change is not
+        // the one the wallet is reading from. See `foreign_node`.
+        let foreign_node = self.foreign_node();
         let online = self.node_status.online;
-        let dot_color = if online {
+        let dot_color = if foreign_node.is_some() {
+            self.colors.warn
+        } else if online {
             self.colors.accent2
         } else {
             self.colors.danger
@@ -207,15 +213,47 @@ impl App {
         } else {
             None
         };
-        let node_text = format!("{} / {}", node_name, network);
+        let node_text = match &foreign_node {
+            Some((backend, network)) => {
+                let backend = match backend {
+                    NodeType::LightClient => "LIGHT",
+                    NodeType::FullNode => "FULL",
+                    NodeType::PublicRpc => "REMOTE",
+                };
+                let network = match network.as_str() {
+                    "Mainnet" => "MAIN",
+                    "Testnet" => "TEST",
+                    other => other,
+                };
+                format!("FOREIGN {} {}", backend, network)
+            }
+            None => format!("{} / {}", node_name, network),
+        };
         let seg = self.strip_segment(
             ui,
             "NODE",
             &node_text,
             sync_suffix.as_ref().map(|(s, c)| (s.as_str(), *c)),
-            Some((dot_color, !online)),
+            Some((dot_color, !online && foreign_node.is_none())),
             t,
         );
+        if foreign_node.is_some() {
+            // No dropdown: the Networks tab is where the foreign node is
+            // explained and where the way out (another node type) lives.
+            if seg.clicked() {
+                self.active_tab = Tab::NodeManager;
+            }
+            seg.on_hover_text(
+                "Another process holds this node's port, so QPV2 is reading that node \
+                 instead of running its own. Click to open the Networks tab.",
+            );
+            ui.add_space(10.0);
+            self.node_selector_open = false;
+            if !online {
+                ui.ctx().request_repaint();
+            }
+            return;
+        }
         ui.painter().text(
             seg.rect.right_center() + egui::vec2(2.0, 2.0),
             egui::Align2::LEFT_CENTER,

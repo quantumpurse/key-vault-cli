@@ -246,8 +246,9 @@ pub(crate) struct NodeStatus {
     /// the configured network.
     pub online: bool,
     /// The chain the node reports when it is not the configured network,
-    /// e.g. `Mainnet`. `online` stays false while this is set.
-    pub network_mismatch: Option<String>,
+    /// e.g. a process that took the port qp's node wanted, or a remote
+    /// RPC on another chain. `online` stays false while this is set.
+    pub mismatched_network: Option<String>,
     /// Caching network verification. True once the genesis check passed on
     /// this connection; the next poll skips the check while it holds.
     pub network_verified: bool,
