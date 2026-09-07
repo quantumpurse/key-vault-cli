@@ -207,6 +207,56 @@ fn test_seed_phrase_rejects_missing_word() {
     assert!(err.contains("requires 36 words"), "unexpected error: {err}");
 }
 
+/// A 36-word phrase assembled from the three 12-word sub-phrases of the
+/// Shake128F test phrase, picked by index, so a test can repeat one.
+fn shake128f_phrase_from_parts(parts: [usize; 3]) -> String {
+    let all = words(SHAKE128F_PHRASE);
+    parts
+        .iter()
+        .flat_map(|&p| all[p * 12..(p + 1) * 12].iter().copied())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn assert_import_rejects_repeated_parts(parts: [usize; 3]) {
+    let phrase = shake128f_phrase_from_parts(parts);
+    let err = seed_phrase_to_entropy(crate::types::SpxVariant::Shake128F, &phrase)
+        .err()
+        .expect("a phrase with a repeated sub-phrase must not import");
+    assert!(err.contains("must all differ"), "unexpected error: {err}");
+}
+
+/// Each chunk of a repeated phrase is valid BIP39 on its own, so only the
+/// component comparison can reject it. One case per pair it compares,
+/// plus the all-equal case.
+#[test]
+fn test_import_rejects_all_three_sub_phrases_equal() {
+    assert_import_rejects_repeated_parts([0, 0, 0]);
+}
+
+#[test]
+fn test_import_rejects_first_two_sub_phrases_equal() {
+    assert_import_rejects_repeated_parts([0, 0, 2]);
+}
+
+#[test]
+fn test_import_rejects_last_two_sub_phrases_equal() {
+    assert_import_rejects_repeated_parts([0, 2, 2]);
+}
+
+#[test]
+fn test_import_rejects_outer_sub_phrases_equal() {
+    assert_import_rejects_repeated_parts([0, 1, 0]);
+}
+
+/// The same three sub-phrases in another order are still all different,
+/// so they import; the check is on equality, not on position.
+#[test]
+fn test_import_accepts_distinct_sub_phrases_reordered() {
+    let phrase = shake128f_phrase_from_parts([2, 0, 1]);
+    assert!(seed_phrase_to_entropy(crate::types::SpxVariant::Shake128F, &phrase).is_ok());
+}
+
 fn pin(s: &str) -> SecureString {
     SecureString::from_string(s.to_string())
 }

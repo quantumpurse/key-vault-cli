@@ -54,6 +54,19 @@ pub(crate) fn seed_phrase_to_entropy(
         })?;
         combined_entropy.extend(SecureVec::from_vec(mnemonic.to_entropy()));
     }
+
+    // The components become sk_seed, sk_prf, and pk_seed, and the last is
+    // part of the public key, so a phrase that repeats a sub-phrase puts a
+    // secret seed on-chain. Each chunk passes its own checksum, so nothing
+    // else catches this.
+    let component = variant.required_entropy_size_component();
+    let (part_1, rest) = combined_entropy.split_at(component);
+    let (part_2, part_3) = rest.split_at(component);
+    if part_1 == part_2 || part_1 == part_3 || part_2 == part_3 {
+        let msg = "Unsafe seed phrase: the three component mnemonics must all differ.".to_string();
+        tracing::error!("{}", msg);
+        return Err(msg);
+    }
     Ok(combined_entropy)
 }
 
