@@ -356,7 +356,7 @@ impl App {
                         .iter()
                         .any(|r| r.block_number > self.confirmed_watermark);
                     if has_new_confirmed {
-                        match store.save(self.wallet_id, self.qp_client.network().tag()) {
+                        match store.save(self.wallet_id, self.qp_client.config().network.tag()) {
                             Ok(()) => {
                                 self.confirmed_watermark = store
                                     .records
@@ -408,14 +408,16 @@ impl App {
     fn rollback_tx_history(&mut self) {
         // so polling in the next frame doesn't see the stale records.
         self.unconfirmed_tx_records.clear();
-        self.tx_history =
-            crate::tx_history::TxHistoryStore::load(self.wallet_id, self.qp_client.network().tag())
-                .unwrap_or_else(|e| {
-                    tracing::error!("tx_history: rollback failed to load snapshot: {}", e);
-                    None
-                })
-                .map(|store| store.records)
-                .unwrap_or_default();
+        self.tx_history = crate::tx_history::TxHistoryStore::load(
+            self.wallet_id,
+            self.qp_client.config().network.tag(),
+        )
+        .unwrap_or_else(|e| {
+            tracing::error!("tx_history: rollback failed to load snapshot: {}", e);
+            None
+        })
+        .map(|store| store.records)
+        .unwrap_or_default();
         self.confirmed_watermark = self
             .tx_history
             .iter()
@@ -733,7 +735,7 @@ impl App {
         match rx.try_recv() {
             Ok(Ok(series)) => {
                 self.qr_adoption_rx = None;
-                crate::qr_adoption::save_series(self.qp_client.network().tag(), &series);
+                crate::qr_adoption::save_series(self.qp_client.config().network.tag(), &series);
                 self.qr_adoption_series = series;
             }
             Ok(Err(e)) => {

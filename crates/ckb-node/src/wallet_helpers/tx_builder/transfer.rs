@@ -23,8 +23,6 @@ const DEFAULT_PLACEHOLDER_LOCK_SIZE: usize = 65;
 /// Builder for transfer transactions.
 pub struct QpTransferBuilder<'a> {
     qp_client: &'a QpClient,
-    /// Whether the target network is mainnet (affects cell dep resolution).
-    is_mainnet: bool,
     /// Size of the placeholder lock field in the witness.
     /// Must match the final signed witness lock length for correct fee estimation.
     placeholder_lock_size: usize,
@@ -32,10 +30,9 @@ pub struct QpTransferBuilder<'a> {
 
 impl<'a> QpTransferBuilder<'a> {
     /// Creates a new transfer builder with default secp256k1 placeholder size.
-    pub fn new(qp_client: &'a QpClient, is_mainnet: bool) -> Self {
+    pub fn new(qp_client: &'a QpClient) -> Self {
         QpTransferBuilder {
             qp_client,
-            is_mainnet,
             placeholder_lock_size: DEFAULT_PLACEHOLDER_LOCK_SIZE,
         }
     }
@@ -110,8 +107,7 @@ impl<'a> QpTransferBuilder<'a> {
         // Create collectors and resolvers via the trait so the right
         // backend impl (full node vs light client) is used.
         let mut cell_collector = self.qp_client.cell_collector();
-        let cell_dep_resolver =
-            super::utils::cell_dep_resolver_from_rpc(self.qp_client, self.is_mainnet)?;
+        let cell_dep_resolver = super::utils::cell_dep_resolver_from_rpc(self.qp_client)?;
         let header_dep_resolver = self.qp_client.header_dep_resolver();
         let tx_dep_provider = self.qp_client.tx_dep_provider();
 
@@ -205,8 +201,7 @@ impl<'a> QpTransferBuilder<'a> {
             })
             .sum();
 
-        let cell_dep_resolver =
-            super::utils::cell_dep_resolver_from_rpc(self.qp_client, self.is_mainnet)?;
+        let cell_dep_resolver = super::utils::cell_dep_resolver_from_rpc(self.qp_client)?;
         let sender_lock_dep = cell_dep_resolver
             .resolve(&from_lock_script)
             .ok_or_else(|| {

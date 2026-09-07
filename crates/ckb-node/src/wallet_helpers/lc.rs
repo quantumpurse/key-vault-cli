@@ -68,7 +68,7 @@ pub fn register_lock_scripts(
         .iter()
         .map(|a| (a.as_str(), start_block))
         .collect();
-    light.register_lock_scripts(&scripts, qp_client.network())
+    light.register_lock_scripts(&scripts, qp_client.config().network)
 }
 
 /// Removes only the given wallet's scripts from the light client,
@@ -126,5 +126,5 @@ pub fn register_all_lock_scripts(
         .iter()
         .map(|a| (a.as_str(), start_block))
         .collect();
-    light.register_all_lock_scripts(&scripts, qp_client.network())
+    light.register_all_lock_scripts(&scripts, qp_client.config().network)
 }

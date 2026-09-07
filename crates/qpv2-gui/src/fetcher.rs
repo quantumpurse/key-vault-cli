@@ -183,7 +183,7 @@ impl App {
             return;
         }
 
-        let network = self.qp_client.network();
+        let network = self.qp_client.config().network;
         let (tx, rx) = std::sync::mpsc::channel();
         self.deposit_headers_rx = Some(rx);
 
@@ -260,7 +260,7 @@ impl App {
             let dao_type_hash = format!("{:#x}", ckb_sdk::constants::DAO_TYPE_HASH);
 
             // Wallet lock script code hash for filtering outputs that belong to us.
-            let wallet_code_hash = match qp_client.network() {
+            let wallet_code_hash = match qp_client.config().network {
                 ckb_node::NetworkType::Mainnet => qpv2_core::constants::CKB_MAINNET_CODE_HASH,
                 ckb_node::NetworkType::Testnet => qpv2_core::constants::CKB_TESTNET_CODE_HASH,
             };
@@ -542,8 +542,10 @@ impl App {
                                 .is_some_and(|t| format!("{:#x}", t.code_hash) == dao_type_hash);
                             if external_recipient.is_none() && !is_dao_output {
                                 let packed: ckb_types::packed::Script = out.lock.clone().into();
-                                let is_mainnet =
-                                    matches!(qp_client.network(), ckb_node::NetworkType::Mainnet);
+                                let is_mainnet = matches!(
+                                    qp_client.config().network,
+                                    ckb_node::NetworkType::Mainnet
+                                );
                                 external_recipient =
                                     Some(crate::utils::script_to_address(&packed, is_mainnet));
                             }
@@ -745,7 +747,7 @@ impl App {
         let rpc_port = parse_rpc_port(&cfg.rpc_url);
         let qp_client = self.qp_client.clone();
         let cached = self.node_status.clone();
-        let network = self.qp_client.network();
+        let network = self.qp_client.config().network;
 
         let (tx, rx) = mpsc::channel();
         self.node_status_rx = Some(rx);
@@ -885,7 +887,7 @@ impl App {
         /// ~3 months of weekly points.
         const WEEKS: u64 = 13;
         self.qr_adoption_next_fetch = Some(std::time::Instant::now() + crate::QR_ADOPTION_INTERVAL);
-        let network = self.qp_client.network();
+        let network = self.qp_client.config().network;
 
         let (tx, rx) = mpsc::channel();
         self.qr_adoption_rx = Some(rx);

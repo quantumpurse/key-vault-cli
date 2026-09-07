@@ -176,7 +176,7 @@ impl App {
             NodeType::LightClient => "LIGHT",
             NodeType::FullNode => "FULL",
         };
-        let network = match self.qp_client.network() {
+        let network = match self.qp_client.config().network {
             ckb_node::NetworkType::Mainnet => "MAIN",
             ckb_node::NetworkType::Testnet => "TEST",
         };

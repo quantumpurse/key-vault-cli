@@ -566,13 +566,10 @@ fn lock_args_to_address(lock_args: &str, is_mainnet: bool) -> Result<ckb_sdk::Ad
     Ok(Address::new(network, payload, true))
 }
 
-fn make_qp_client(
-    network: &str,
-    rpc_url: &Option<String>,
-) -> Result<(ckb_node::QpClient, bool), String> {
-    let (net, is_mainnet) = match network {
-        "mainnet" => (ckb_node::NetworkType::Mainnet, true),
-        "testnet" => (ckb_node::NetworkType::Testnet, false),
+fn make_qp_client(network: &str, rpc_url: &Option<String>) -> Result<ckb_node::QpClient, String> {
+    let net = match network {
+        "mainnet" => ckb_node::NetworkType::Mainnet,
+        "testnet" => ckb_node::NetworkType::Testnet,
         _ => {
             return Err(format!(
                 "Invalid network '{}'. Use 'mainnet' or 'testnet'.",
@@ -597,7 +594,7 @@ fn make_qp_client(
             .join("node"),
     };
 
-    Ok((ckb_node::QpClient::new(config), is_mainnet))
+    Ok(ckb_node::QpClient::new(config))
 }
 
 fn parse_out_point(tx_hash: &str, index: u32) -> Result<ckb_types::packed::OutPoint, String> {
@@ -617,7 +614,8 @@ fn handle_dao_list(
     network: &str,
     rpc_url: &Option<String>,
 ) -> Result<(), String> {
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let is_mainnet = qp_client.is_mainnet();
 
     let accounts: Vec<qpv2_core::types::SphincsPlusAccount> = if let Some(la) = lock_args {
         let acct = KeyVault::get_account(wallet_id, la)?
@@ -703,11 +701,11 @@ fn handle_dao_deposit(
     }
 
     let max_witness_lock_size = account.config.max_witness_lock_size();
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
-    let from_address = lock_args_to_address(lock_args, is_mainnet)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let from_address = lock_args_to_address(lock_args, qp_client.is_mainnet())?;
 
     println!("Building DAO deposit...");
-    let unsigned_tx = ckb_node::QpDaoDepositBuilder::new(&qp_client, is_mainnet)
+    let unsigned_tx = ckb_node::QpDaoDepositBuilder::new(&qp_client)
         .with_placeholder_lock_size(max_witness_lock_size)
         .build_unsigned_deposit(&from_address, capacity_sh, fee_rate)
         .map_err(|e| format!("Failed to build DAO deposit: {}", e))?;
@@ -753,12 +751,12 @@ fn handle_dao_prepare(
     }
 
     let max_witness_lock_size = account.config.max_witness_lock_size();
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
-    let from_address = lock_args_to_address(lock_args, is_mainnet)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let from_address = lock_args_to_address(lock_args, qp_client.is_mainnet())?;
     let out_point = parse_out_point(tx_hash, index)?;
 
     println!("Building DAO prepare...");
-    let unsigned_tx = ckb_node::QpDaoPrepareBuilder::new(&qp_client, is_mainnet)
+    let unsigned_tx = ckb_node::QpDaoPrepareBuilder::new(&qp_client)
         .with_placeholder_lock_size(max_witness_lock_size)
         .build_unsigned_dao_request_withdraw(&from_address, vec![out_point], fee_rate)
         .map_err(|e| format!("Failed to build DAO prepare: {}", e))?;
@@ -804,12 +802,12 @@ fn handle_dao_withdraw(
     }
 
     let max_witness_lock_size = account.config.max_witness_lock_size();
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
-    let from_address = lock_args_to_address(lock_args, is_mainnet)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let from_address = lock_args_to_address(lock_args, qp_client.is_mainnet())?;
     let out_point = parse_out_point(tx_hash, index)?;
 
     println!("Building DAO withdraw...");
-    let unsigned_tx = ckb_node::QpDaoWithdrawBuilder::new(&qp_client, is_mainnet)
+    let unsigned_tx = ckb_node::QpDaoWithdrawBuilder::new(&qp_client)
         .with_placeholder_lock_size(max_witness_lock_size)
         .build_unsigned_dao_withdraw(&from_address, vec![out_point], fee_rate)
         .map_err(|e| format!("Failed to build DAO withdraw: {}", e))?;
@@ -863,7 +861,8 @@ fn handle_transfer(
     }
 
     let max_witness_lock_size = account.config.max_witness_lock_size();
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let is_mainnet = qp_client.is_mainnet();
 
     let from_address = lock_args_to_address(lock_args, is_mainnet)?;
     let to_address: ckb_sdk::Address = to
@@ -879,7 +878,7 @@ fn handle_transfer(
     }
 
     println!("Building transaction...");
-    let builder = ckb_node::QpTransferBuilder::new(&qp_client, is_mainnet)
+    let builder = ckb_node::QpTransferBuilder::new(&qp_client)
         .with_placeholder_lock_size(max_witness_lock_size);
     let unsigned_tx = builder
         .build_unsigned_transfer(&from_address, &to_address, capacity_sh, fee_rate, None)
@@ -895,7 +894,7 @@ fn handle_transfer(
         .map_err(|e| format!("Failed to compute tx message: {}", e))?;
 
     let signed_tx = if KeyVault::is_hardware_wallet(wallet_id) {
-        sign_transfer_with_trezor(&account, &qp_client, is_mainnet, unsigned_tx)?
+        sign_transfer_with_trezor(&account, &qp_client, unsigned_tx)?
     } else {
         let auth = resolve_auth_key(wallet_id, "sign and send the transfer")?;
         let variant = KeyVault::get_spx_variant(wallet_id)?;
@@ -918,7 +917,6 @@ fn handle_transfer(
 fn sign_transfer_with_trezor(
     account: &qpv2_core::types::SphincsPlusAccount,
     qp_client: &ckb_node::QpClient,
-    is_mainnet: bool,
     unsigned_tx: ckb_types::core::TransactionView,
 ) -> Result<ckb_types::core::TransactionView, String> {
     println!("Fetching previous transactions for the device...");
@@ -935,7 +933,7 @@ fn sign_transfer_with_trezor(
         .sign_tx(
             account.index,
             variant,
-            is_mainnet,
+            qp_client.is_mainnet(),
             &unsigned_tx,
             account.config.max_witness_lock_size(),
             &prev_txs,
@@ -985,7 +983,8 @@ fn handle_msig_build_dao(
     }
 
     let max_witness_lock_size = account.config.max_witness_lock_size();
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let is_mainnet = qp_client.is_mainnet();
     let from_address = lock_args_to_address(lock_args, is_mainnet)?;
 
     println!("Building unsigned DAO {} transaction...", op);
@@ -997,14 +996,14 @@ fn handle_msig_build_dao(
             if capacity_sh == 0 {
                 return Err("Amount must be greater than zero.".to_string());
             }
-            ckb_node::QpDaoDepositBuilder::new(&qp_client, is_mainnet)
+            ckb_node::QpDaoDepositBuilder::new(&qp_client)
                 .with_placeholder_lock_size(max_witness_lock_size)
                 .build_unsigned_deposit(&from_address, capacity_sh, fee_rate)
                 .map_err(|e| format!("Failed to build DAO deposit: {}", e))?
         }
         "prepare" => {
             let out_point = parse_out_point(tx_hash.ok_or("tx_hash required for prepare")?, index)?;
-            ckb_node::QpDaoPrepareBuilder::new(&qp_client, is_mainnet)
+            ckb_node::QpDaoPrepareBuilder::new(&qp_client)
                 .with_placeholder_lock_size(max_witness_lock_size)
                 .build_unsigned_dao_request_withdraw(&from_address, vec![out_point], fee_rate)
                 .map_err(|e| format!("Failed to build DAO prepare: {}", e))?
@@ -1012,7 +1011,7 @@ fn handle_msig_build_dao(
         "withdraw" => {
             let out_point =
                 parse_out_point(tx_hash.ok_or("tx_hash required for withdraw")?, index)?;
-            ckb_node::QpDaoWithdrawBuilder::new(&qp_client, is_mainnet)
+            ckb_node::QpDaoWithdrawBuilder::new(&qp_client)
                 .with_placeholder_lock_size(max_witness_lock_size)
                 .build_unsigned_dao_withdraw(&from_address, vec![out_point], fee_rate)
                 .map_err(|e| format!("Failed to build DAO withdraw: {}", e))?
@@ -1079,7 +1078,8 @@ fn handle_msig_build_transfer(ctx: &MsigBuildCtx, to: &str, amount: &str) -> Res
 
     let max_witness_lock_size = account.config.max_witness_lock_size();
 
-    let (qp_client, is_mainnet) = make_qp_client(network, rpc_url)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
+    let is_mainnet = qp_client.is_mainnet();
 
     let from_address = lock_args_to_address(lock_args, is_mainnet)?;
     let to_address: ckb_sdk::Address = to
@@ -1101,7 +1101,7 @@ fn handle_msig_build_transfer(ctx: &MsigBuildCtx, to: &str, amount: &str) -> Res
         return Err("Amount must be greater than zero.".to_string());
     }
 
-    let builder = ckb_node::QpTransferBuilder::new(&qp_client, is_mainnet)
+    let builder = ckb_node::QpTransferBuilder::new(&qp_client)
         .with_placeholder_lock_size(max_witness_lock_size);
 
     println!("Building unsigned transaction...");
@@ -1273,7 +1273,7 @@ fn handle_msig_submit(
     let signed_tx = ckb_node::fill_witness(unsigned_tx, request.script_group_index, witness_lock)
         .map_err(|e| format!("Failed to fill witness: {}", e))?;
 
-    let (qp_client, _) = make_qp_client(network, rpc_url)?;
+    let qp_client = make_qp_client(network, rpc_url)?;
 
     println!("Submitting transaction...");
     let tx_hash = ckb_node::wallet_helpers::tx_builder::send_transaction(&qp_client, &signed_tx)

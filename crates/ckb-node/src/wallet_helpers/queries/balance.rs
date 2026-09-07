@@ -13,7 +13,7 @@ pub fn fetch_quantum_lock_balance(
     qp_client: &QpClient,
     lock_args_hex: &str,
 ) -> Result<u64, NodeManagerError> {
-    let script = build_qr_lock_script(qp_client.network(), lock_args_hex)?;
+    let script = build_qr_lock_script(qp_client.config().network, lock_args_hex)?;
 
     let search_key = SearchKey {
         script,

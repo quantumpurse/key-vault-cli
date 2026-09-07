@@ -461,7 +461,7 @@ impl App {
             return None;
         }
         let port = self.node_status.rpc_port?;
-        let network = self.qp_client.network();
+        let network = self.qp_client.config().network;
         if let Some(detected) = &self.node_status.network_mismatch {
             return Some((
                 format!("Foreign {} node detected at port {}", detected, port),

@@ -231,24 +231,9 @@ impl QpClient {
         &self.config
     }
 
-    /// Returns the network (Mainnet/Testnet) the active backend is bound to.
-    pub fn network(&self) -> NetworkType {
-        self.config.network
-    }
-
-    /// Returns the backend kind (`PublicRpc`, `FullNode`, or `LightClient`).
-    pub fn node_type(&self) -> NodeType {
-        self.config.node_type
-    }
-
     /// True if this handle is bound to the mainnet network.
     pub fn is_mainnet(&self) -> bool {
         self.config.network == NetworkType::Mainnet
-    }
-
-    /// Returns the JSON-RPC endpoint URL this handle is bound to.
-    fn rpc_url(&self) -> &str {
-        &self.config.rpc_url
     }
 
     /// Sends a batch of JSON-RPC calls in a single HTTP POST and returns
@@ -277,7 +262,7 @@ impl QpClient {
             .collect();
 
         let resp = reqwest::blocking::Client::new()
-            .post(self.rpc_url())
+            .post(&self.config().rpc_url)
             .json(&batch)
             .send()
             .map_err(|e| NodeManagerError::RpcError(format!("Batch RPC HTTP error: {}", e)))?

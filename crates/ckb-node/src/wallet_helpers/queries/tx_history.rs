@@ -16,7 +16,7 @@ pub fn fetch_recent_transactions(
     after_block: Option<u64>,
     limit: Option<usize>,
 ) -> Result<Vec<Tx>, NodeManagerError> {
-    let script = build_qr_lock_script(qp_client.network(), lock_args_hex)?;
+    let script = build_qr_lock_script(qp_client.config().network, lock_args_hex)?;
 
     let search_key = SearchKey {
         script,

@@ -37,7 +37,6 @@ fn build_balanced_dao_tx(
     lock_script: &Script,
     fee_rate: u64,
     qp_client: &QpClient,
-    is_mainnet: bool,
     placeholder_lock_size: usize,
     fee_output_without_change: Option<usize>,
 ) -> Result<TransactionView, NodeManagerError> {
@@ -56,7 +55,7 @@ fn build_balanced_dao_tx(
     };
 
     let mut cell_collector = qp_client.cell_collector();
-    let cell_dep_resolver = super::utils::cell_dep_resolver_from_rpc(qp_client, is_mainnet)?;
+    let cell_dep_resolver = super::utils::cell_dep_resolver_from_rpc(qp_client)?;
     let header_dep_resolver = qp_client.header_dep_resolver();
     let tx_dep_provider = qp_client.tx_dep_provider();
 
@@ -112,16 +111,14 @@ fn build_balanced_dao_tx(
 /// Builder for DAO deposit transactions.
 pub struct QpDaoDepositBuilder<'a> {
     qp_client: &'a QpClient,
-    is_mainnet: bool,
     placeholder_lock_size: usize,
 }
 
 impl<'a> QpDaoDepositBuilder<'a> {
     /// Creates a new DAO deposit builder with default secp256k1 placeholder size.
-    pub fn new(qp_client: &'a QpClient, is_mainnet: bool) -> Self {
+    pub fn new(qp_client: &'a QpClient) -> Self {
         QpDaoDepositBuilder {
             qp_client,
-            is_mainnet,
             placeholder_lock_size: DEFAULT_PLACEHOLDER_LOCK_SIZE,
         }
     }
@@ -162,7 +159,6 @@ impl<'a> QpDaoDepositBuilder<'a> {
             &lock_script,
             fee_rate,
             self.qp_client,
-            self.is_mainnet,
             self.placeholder_lock_size,
             None,
         )
@@ -192,8 +188,7 @@ impl<'a> QpDaoDepositBuilder<'a> {
             })
             .sum();
 
-        let cell_dep_resolver =
-            super::utils::cell_dep_resolver_from_rpc(self.qp_client, self.is_mainnet)?;
+        let cell_dep_resolver = super::utils::cell_dep_resolver_from_rpc(self.qp_client)?;
         let sender_lock_dep = cell_dep_resolver.resolve(&lock_script).ok_or_else(|| {
             NodeManagerError::RpcError("Failed to resolve sender lock cell dep.".to_string())
         })?;
@@ -296,16 +291,14 @@ impl<'a> QpDaoDepositBuilder<'a> {
 /// Builder for DAO prepare (withdraw phase 1) transactions.
 pub struct QpDaoPrepareBuilder<'a> {
     qp_client: &'a QpClient,
-    is_mainnet: bool,
     placeholder_lock_size: usize,
 }
 
 impl<'a> QpDaoPrepareBuilder<'a> {
     /// Creates a new DAO prepare builder with default secp256k1 placeholder size.
-    pub fn new(qp_client: &'a QpClient, is_mainnet: bool) -> Self {
+    pub fn new(qp_client: &'a QpClient) -> Self {
         QpDaoPrepareBuilder {
             qp_client,
-            is_mainnet,
             placeholder_lock_size: DEFAULT_PLACEHOLDER_LOCK_SIZE,
         }
     }
@@ -357,8 +350,7 @@ impl<'a> QpDaoPrepareBuilder<'a> {
         // witness 0, then run the balancer on the patched transaction so fee
         // calculation includes the full witness size.
         let mut cell_collector = self.qp_client.cell_collector();
-        let cell_dep_resolver =
-            super::utils::cell_dep_resolver_from_rpc(self.qp_client, self.is_mainnet)?;
+        let cell_dep_resolver = super::utils::cell_dep_resolver_from_rpc(self.qp_client)?;
         let header_dep_resolver = self.qp_client.header_dep_resolver();
         let tx_dep_provider = self.qp_client.tx_dep_provider();
 
@@ -442,16 +434,14 @@ impl<'a> QpDaoPrepareBuilder<'a> {
 /// Builder for DAO withdraw (phase 2) transactions.
 pub struct QpDaoWithdrawBuilder<'a> {
     qp_client: &'a QpClient,
-    is_mainnet: bool,
     placeholder_lock_size: usize,
 }
 
 impl<'a> QpDaoWithdrawBuilder<'a> {
     /// Creates a new DAO withdraw builder with default secp256k1 placeholder size.
-    pub fn new(qp_client: &'a QpClient, is_mainnet: bool) -> Self {
+    pub fn new(qp_client: &'a QpClient) -> Self {
         QpDaoWithdrawBuilder {
             qp_client,
-            is_mainnet,
             placeholder_lock_size: DEFAULT_PLACEHOLDER_LOCK_SIZE,
         }
     }
@@ -519,7 +509,6 @@ impl<'a> QpDaoWithdrawBuilder<'a> {
             &lock_script,
             fee_rate,
             self.qp_client,
-            self.is_mainnet,
             self.placeholder_lock_size,
             Some(0),
         )

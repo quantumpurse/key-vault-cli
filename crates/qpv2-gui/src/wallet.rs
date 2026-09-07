@@ -84,7 +84,7 @@ impl App {
         let start_block = match start {
             StartingBlock::Tip => tip,
             StartingBlock::Detect => {
-                let network = self.qp_client.network();
+                let network = self.qp_client.config().network;
                 let url = ckb_node::NodeConfig::default_rpc_url_for(
                     ckb_node::NodeType::PublicRpc,
                     network,
@@ -173,7 +173,7 @@ impl App {
             return;
         }
 
-        let network = self.qp_client.network();
+        let network = self.qp_client.config().network;
         // Always use the network's public RPC — even if the active
         // backend is already PublicRpc, building a fresh client keeps
         // this a self-contained one-shot.
@@ -414,7 +414,8 @@ impl App {
         // rebuild against the chain on the next tick.
         self.qr_adoption_rx = None;
         self.qr_adoption_next_fetch = None;
-        self.qr_adoption_series = crate::qr_adoption::load_series(self.qp_client.network().tag());
+        self.qr_adoption_series =
+            crate::qr_adoption::load_series(self.qp_client.config().network.tag());
 
         // Balances, tx history, and DAO cells are network-scoped but
         // keyed by lock args alone — left in place they keep rendering
@@ -459,7 +460,7 @@ impl App {
     /// or first time on this network) or read failure (corrupted file →
     /// surfaces as a status warning; next sync rebuilds from scratch).
     pub(crate) fn load_tx_history_from_disk(&mut self) {
-        match TxHistoryStore::load(self.wallet_id, self.qp_client.network().tag()) {
+        match TxHistoryStore::load(self.wallet_id, self.qp_client.config().network.tag()) {
             Ok(Some(store)) => {
                 // The file holds only confirmed records, so its highest
                 // block is the sync floor. Pending rows are skipped

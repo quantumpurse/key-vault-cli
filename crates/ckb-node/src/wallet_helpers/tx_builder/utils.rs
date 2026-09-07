@@ -21,7 +21,6 @@ use qpv2_core::constants;
 /// using the known deployment OutPoint.
 pub fn cell_dep_resolver_from_rpc(
     qp_client: &QpClient,
-    is_mainnet: bool,
 ) -> Result<DefaultCellDepResolver, NodeManagerError> {
     let genesis_block = qp_client.get_genesis_block()?;
     let block_view: BlockView = genesis_block.into();
@@ -30,7 +29,7 @@ pub fn cell_dep_resolver_from_rpc(
     })?;
 
     // Register the quantum-resistant lock script cell dep.
-    let (code_hash_hex, hash_type, dep_tx_hash_hex, dep_index) = if is_mainnet {
+    let (code_hash_hex, hash_type, dep_tx_hash_hex, dep_index) = if qp_client.is_mainnet() {
         (
             constants::CKB_MAINNET_CODE_HASH,
             constants::CKB_MAINNET_HASH_TYPE,

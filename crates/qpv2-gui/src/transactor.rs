@@ -15,8 +15,8 @@ use std::sync::mpsc;
 /// `Ok(())` for non-LightClient backends (full nodes / public RPC have
 /// every cell); `Ok(())` for LightClient when the dep is already in the
 /// store. Otherwise returns a user-facing message ready for `App.status`.
-fn check_qr_lock_dep_ready(qp_client: &QpClient, node_type: NodeType) -> Result<(), String> {
-    if node_type != NodeType::LightClient {
+fn check_qr_lock_dep_ready(qp_client: &QpClient) -> Result<(), String> {
+    if qp_client.config().node_type != NodeType::LightClient {
         return Ok(());
     }
     match ckb_node::wallet_helpers::lc::fetch_qr_lock_dep(qp_client) {
@@ -150,17 +150,15 @@ impl App {
         );
         self.tx_status = TransactionStatus::Building;
         let qp_client = self.qp_client.clone();
-        let node_type = self.qp_client.config().node_type;
-        let is_mainnet = self.qp_client.is_mainnet();
 
         let (tx, rx) = mpsc::channel();
         self.transaction_build_rx = Some(rx);
 
         std::thread::spawn(move || {
             let result = (|| -> Result<_, String> {
-                check_qr_lock_dep_ready(&qp_client, node_type)?;
+                check_qr_lock_dep_ready(&qp_client)?;
 
-                let builder = ckb_node::QpTransferBuilder::new(&qp_client, is_mainnet)
+                let builder = ckb_node::QpTransferBuilder::new(&qp_client)
                     .with_placeholder_lock_size(max_witness_lock_size);
 
                 let unsigned_tx = if send_all {
@@ -267,17 +265,15 @@ impl App {
         );
         self.tx_status = TransactionStatus::Building;
         let qp_client = self.qp_client.clone();
-        let node_type = self.qp_client.config().node_type;
-        let is_mainnet = self.qp_client.is_mainnet();
 
         let (tx, rx) = mpsc::channel();
         self.transaction_build_rx = Some(rx);
 
         std::thread::spawn(move || {
             let result = (|| -> Result<_, String> {
-                check_qr_lock_dep_ready(&qp_client, node_type)?;
+                check_qr_lock_dep_ready(&qp_client)?;
 
-                let builder = ckb_node::QpDaoDepositBuilder::new(&qp_client, is_mainnet)
+                let builder = ckb_node::QpDaoDepositBuilder::new(&qp_client)
                     .with_placeholder_lock_size(max_witness_lock_size);
 
                 let unsigned_tx = if deposit_all {
@@ -345,17 +341,15 @@ impl App {
         tracing::info!("DAO prepare started: wallet_id={}", self.wallet_id);
         self.tx_status = TransactionStatus::Building;
         let qp_client = self.qp_client.clone();
-        let node_type = self.qp_client.config().node_type;
-        let is_mainnet = self.qp_client.is_mainnet();
 
         let (tx, rx) = mpsc::channel();
         self.transaction_build_rx = Some(rx);
 
         std::thread::spawn(move || {
             let result = (|| -> Result<_, String> {
-                check_qr_lock_dep_ready(&qp_client, node_type)?;
+                check_qr_lock_dep_ready(&qp_client)?;
 
-                let unsigned_tx = ckb_node::QpDaoPrepareBuilder::new(&qp_client, is_mainnet)
+                let unsigned_tx = ckb_node::QpDaoPrepareBuilder::new(&qp_client)
                     .with_placeholder_lock_size(max_witness_lock_size)
                     .build_unsigned_dao_request_withdraw(
                         &from_address,
@@ -418,17 +412,15 @@ impl App {
         tracing::info!("DAO withdraw started: wallet_id={}", self.wallet_id);
         self.tx_status = TransactionStatus::Building;
         let qp_client = self.qp_client.clone();
-        let node_type = self.qp_client.config().node_type;
-        let is_mainnet = self.qp_client.is_mainnet();
 
         let (tx, rx) = mpsc::channel();
         self.transaction_build_rx = Some(rx);
 
         std::thread::spawn(move || {
             let result = (|| -> Result<_, String> {
-                check_qr_lock_dep_ready(&qp_client, node_type)?;
+                check_qr_lock_dep_ready(&qp_client)?;
 
-                let unsigned_tx = ckb_node::QpDaoWithdrawBuilder::new(&qp_client, is_mainnet)
+                let unsigned_tx = ckb_node::QpDaoWithdrawBuilder::new(&qp_client)
                     .with_placeholder_lock_size(max_witness_lock_size)
                     .build_unsigned_dao_withdraw(&from_address, vec![prepared_out_point], fee_rate)
                     .map_err(|e| format!("Failed to build DAO withdraw: {}", e))?;
