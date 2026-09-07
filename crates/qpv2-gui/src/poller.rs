@@ -434,9 +434,7 @@ impl App {
     pub(crate) fn poll_local_node_liveness(&mut self) {
         if self.local_node.has_local_process() && !self.local_node.is_alive() {
             tracing::error!("Local node failed to start.");
-            self.status = Status::Error(
-                "Local node failed to start.".to_string(),
-            );
+            self.status = Status::Error("Local node failed to start.".to_string());
             self.local_node.stop();
         }
     }

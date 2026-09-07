@@ -464,19 +464,13 @@ impl App {
         let network = self.qp_client.network();
         if let Some(detected) = &self.node_status.network_mismatch {
             return Some((
-                format!(
-                    "Foreign {} node detected at port {}",
-                    detected, port
-                ),
+                format!("Foreign {} node detected at port {}", detected, port),
                 self.colors.warn,
             ));
         }
         if self.node_status.online {
             return Some((
-                format!(
-                    "Foreign {} node detected at port {}",
-                    network, port
-                ),
+                format!("Foreign {} node detected at port {}", network, port),
                 self.colors.warn,
             ));
         }
