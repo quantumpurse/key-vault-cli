@@ -10,7 +10,7 @@ use crate::types::{label_font, Status};
 use crate::ui::utils::{accent_button, breathing_dot, row_hover};
 use crate::App;
 
-const POPUP_W: f32 = 220.0;
+const POPUP_W: f32 = 250.0;
 const ROW_H: f32 = 34.0;
 const PAD: f32 = 12.0;
 
